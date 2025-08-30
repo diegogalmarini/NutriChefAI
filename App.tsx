@@ -21,6 +21,10 @@ const locales = {
         errorContent: "An unknown error occurred.",
         errorEmptyIngredients: "Please add at least one ingredient to generate a healthy recipe.",
         errorQuotaExceeded: "Image generation quota exceeded. Please check your plan and billing details.",
+        errorGeneration: "Failed to generate recipes. The AI chef might be on a break. Please check your ingredients and try again.",
+        errorImageGeneration: "Failed to create a healthy image for the recipe. Please try again.",
+        errorApiKey: "The application is not configured correctly. Please contact the administrator.",
+        errorIdentification: "Failed to identify ingredients from the image. Please try another photo.",
         loadingRecipes: "Crafting healthy recipes...",
         loadingImages: "Plating your healthy dish...",
         myFavoriteRecipes: "My Favorite Recipes",
@@ -41,6 +45,10 @@ const locales = {
         errorContent: "Ocurrió un error desconocido.",
         errorEmptyIngredients: "Por favor, añade al menos un ingrediente para generar una receta saludable.",
         errorQuotaExceeded: "Se ha excedido la cuota de generación de imágenes. Revisa tu plan y detalles de facturación.",
+        errorGeneration: "No se pudieron generar las recetas. El chef de IA podría estar en un descanso. Revisa tus ingredientes e inténtalo de nuevo.",
+        errorImageGeneration: "No se pudo crear una imagen para la receta. Por favor, inténtalo de nuevo.",
+        errorApiKey: "La aplicación no está configurada correctamente. Por favor, contacta al administrador.",
+        errorIdentification: "No se pudieron identificar los ingredientes de la imagen. Por favor, intenta con otra foto.",
         loadingRecipes: "Creando recetas saludables...",
         loadingImages: "Emplatando tu plato saludable...",
         myFavoriteRecipes: "Mis Recetas Favoritas",
@@ -199,8 +207,14 @@ const App: React.FC = () => {
                         );
                     } catch (imgErr) {
                          console.error(`Failed to regenerate image for shared recipe "${decodedRecipe.recipeName}":`, imgErr);
-                         if (imgErr instanceof Error && imgErr.message.includes("quota exceeded")) {
-                            setError(t.errorQuotaExceeded);
+                         if (imgErr instanceof Error) {
+                            if (imgErr.message.includes("quota exceeded")) {
+                                setError(t.errorQuotaExceeded);
+                            } else if (imgErr.message === 'API_KEY_INVALID') {
+                                setError(t.errorApiKey);
+                            } else if (imgErr.message === 'IMAGE_GENERATION_FAILED') {
+                                setError(t.errorImageGeneration);
+                            }
                         }
                     }
                 })();
@@ -288,14 +302,35 @@ const App: React.FC = () => {
                     );
                 } catch (imgErr) {
                     console.error(`Failed to generate image for "${recipe.recipeName}":`, imgErr);
-                    if (imgErr instanceof Error && imgErr.message.includes("quota exceeded")) {
-                        setError(t.errorQuotaExceeded);
-                        break;
+                    if (imgErr instanceof Error) {
+                        if (imgErr.message.includes("quota exceeded")) {
+                            setError(t.errorQuotaExceeded);
+                            break;
+                        } else if (imgErr.message === 'API_KEY_INVALID') {
+                            setError(t.errorApiKey);
+                            break;
+                        } else if (imgErr.message === 'IMAGE_GENERATION_FAILED') {
+                            setError(t.errorImageGeneration);
+                            break;
+                        }
                     }
                 }
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : t.errorContent);
+            if (err instanceof Error) {
+                switch(err.message) {
+                    case 'API_KEY_INVALID':
+                        setError(t.errorApiKey);
+                        break;
+                    case 'GENERATION_FAILED':
+                        setError(t.errorGeneration);
+                        break;
+                    default:
+                        setError(err.message);
+                }
+            } else {
+                setError(t.errorContent);
+            }
         } finally {
             setIsLoading(false);
         }
@@ -321,7 +356,20 @@ const App: React.FC = () => {
                 setDetectedIngredients(identified);
                 setIsModalOpen(true);
             } catch (err) {
-                 setError(err instanceof Error ? err.message : t.errorContent);
+                 if (err instanceof Error) {
+                    switch(err.message) {
+                        case 'API_KEY_INVALID':
+                            setError(t.errorApiKey);
+                            break;
+                        case 'IDENTIFICATION_FAILED':
+                            setError(t.errorIdentification);
+                            break;
+                        default:
+                             setError(err.message);
+                    }
+                 } else {
+                    setError(t.errorContent);
+                 }
             } finally {
                 setIsScanning(false);
                 if(fileInputRef.current) fileInputRef.current.value = "";

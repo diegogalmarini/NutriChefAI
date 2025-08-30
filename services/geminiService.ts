@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import type { Recipe } from '../types';
 
@@ -124,7 +125,10 @@ For each of the three recipes, provide all the information required by the JSON 
 
     } catch (error) {
         console.error("Error generating recipes from Gemini API:", error);
-        throw new Error("Failed to generate recipes. The AI chef might be on a break. Please check your ingredients and try again.");
+        if (error instanceof Error && (error.message.includes('API key not valid') || error.message.includes('API_KEY_INVALID'))) {
+            throw new Error("API_KEY_INVALID");
+        }
+        throw new Error("GENERATION_FAILED");
     }
 };
 
@@ -155,18 +159,17 @@ export const generateRecipeImage = async (recipeName: string, recipeDescription:
             }
         } catch (error: any) {
             console.error(`Error generating image for "${recipeName}" (Attempt ${attempt}/${maxRetries}):`, error);
-
-            // Check for rate limit / quota error (429)
             const errorMessage = typeof error === 'object' && error !== null && error.message ? error.message : JSON.stringify(error);
+
             if (errorMessage.includes("429") || errorMessage.includes("RESOURCE_EXHAUSTED")) {
-                 // Don't retry on quota errors, fail fast and inform the user.
-                 throw new Error("Image generation quota exceeded. Please check your API plan and billing details.");
+                 throw new Error("Image generation quota exceeded. Please check your plan and billing details.");
+            }
+             if (errorMessage.includes('API key not valid') || errorMessage.includes('API_KEY_INVALID')) {
+                throw new Error("API_KEY_INVALID");
             }
 
-            // For other transient errors (e.g., 500), retry with exponential backoff.
             if (attempt === maxRetries) {
-                // If this was the last attempt, re-throw the error to be caught by the calling function.
-                throw new Error("Failed to create a healthy image for the recipe. Please try again.");
+                throw new Error("IMAGE_GENERATION_FAILED");
             }
             
             await new Promise(resolve => setTimeout(resolve, delay));
@@ -174,8 +177,7 @@ export const generateRecipeImage = async (recipeName: string, recipeDescription:
         }
     }
     
-    // This line should be unreachable, but it satisfies TypeScript's need for a return path.
-    throw new Error("Image generation failed after all retries.");
+    throw new Error("IMAGE_GENERATION_FAILED");
 };
 
 export const identifyIngredientsFromImage = async (base64ImageData: string, mimeType: string, language: 'en' | 'es'): Promise<string[]> => {
@@ -216,6 +218,9 @@ export const identifyIngredientsFromImage = async (base64ImageData: string, mime
 
     } catch (error) {
         console.error("Error identifying ingredients from image:", error);
-        throw new Error(language === 'es' ? "No se pudieron identificar los ingredientes de la imagen. Por favor, intenta con otra foto." : "Failed to identify ingredients from the image. Please try another photo.");
+        if (error instanceof Error && (error.message.includes('API key not valid') || error.message.includes('API_KEY_INVALID'))) {
+            throw new Error("API_KEY_INVALID");
+        }
+        throw new Error("IDENTIFICATION_FAILED");
     }
 };
