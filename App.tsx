@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import type { Recipe } from './types';
+import type { Recipe, ImageState } from './types';
 import { generateRecipes, generateRecipeImage, identifyIngredientsFromImage } from './services/geminiService';
 import IngredientInput from './components/IngredientInput';
 import RecipeCard from './components/RecipeCard';
@@ -92,7 +92,7 @@ const getRandomIngredients = (): string[] => {
 };
 
 // --- Data Compaction/Expansion for Sharing ---
-const compactRecipe = (recipe: Omit<Recipe, 'imageUrl'>) => {
+const compactRecipe = (recipe: Omit<Recipe, 'imageUrl' | 'imageState'>) => {
     return {
         v: 1, // Version number
         id: recipe.id,
@@ -110,7 +110,7 @@ const compactRecipe = (recipe: Omit<Recipe, 'imageUrl'>) => {
     };
 };
 
-const expandRecipe = (compact: any): Recipe => {
+const expandRecipe = (compact: any): Omit<Recipe, 'imageState'> => {
     if (compact.v !== 1) throw new Error("Unsupported recipe version");
     return {
         id: compact.id,
@@ -153,7 +153,9 @@ const App: React.FC = () => {
     const [favoriteRecipes, setFavoriteRecipes] = useState<Recipe[]>(() => {
         try {
             const savedFavorites = localStorage.getItem('nutriChefFavorites');
-            return savedFavorites ? JSON.parse(savedFavorites) : [];
+            const parsed = savedFavorites ? JSON.parse(savedFavorites) : [];
+            // Add imageState to old favorites for compatibility
+            return parsed.map((r: Recipe) => ({ ...r, imageState: r.imageUrl ? 'success' : 'error' }));
         } catch (error) {
             console.error("Could not load favorites from localStorage", error);
             return [];
@@ -194,7 +196,7 @@ const App: React.FC = () => {
                 const compact = JSON.parse(decompressed);
                 const decodedRecipe = expandRecipe(compact);
 
-                setSharedRecipe(decodedRecipe);
+                setSharedRecipe({ ...decodedRecipe, imageState: 'loading' });
                 window.history.replaceState({}, document.title, window.location.pathname);
 
                 (async () => {
@@ -202,19 +204,25 @@ const App: React.FC = () => {
                         const imageUrl = await generateRecipeImage(decodedRecipe.recipeName, decodedRecipe.description);
                         setSharedRecipe(currentRecipe => 
                             currentRecipe && currentRecipe.id === decodedRecipe.id 
-                                ? { ...currentRecipe, imageUrl } 
+                                ? { ...currentRecipe, imageUrl, imageState: 'success' } 
                                 : currentRecipe
                         );
                     } catch (imgErr) {
                          console.error(`Failed to regenerate image for shared recipe "${decodedRecipe.recipeName}":`, imgErr);
                          if (imgErr instanceof Error) {
-                            if (imgErr.message.includes("quota exceeded")) {
+                            if (imgErr.message === "QUOTA_EXCEEDED") {
                                 setError(t.errorQuotaExceeded);
+                                setSharedRecipe(current => current ? { ...current, imageState: 'error_quota' } : null);
                             } else if (imgErr.message === 'API_KEY_INVALID') {
                                 setError(t.errorApiKey);
-                            } else if (imgErr.message === 'IMAGE_GENERATION_FAILED') {
+                                setSharedRecipe(current => current ? { ...current, imageState: 'error' } : null);
+                            } else {
                                 setError(t.errorImageGeneration);
+                                setSharedRecipe(current => current ? { ...current, imageState: 'error' } : null);
                             }
+                        } else {
+                             setError(t.errorContent);
+                             setSharedRecipe(current => current ? { ...current, imageState: 'error' } : null);
                         }
                     }
                 })();
@@ -272,7 +280,11 @@ const App: React.FC = () => {
             if (isFavorited) {
                 return prev.filter(r => r.id !== recipeToToggle.id);
             } else {
-                return [...prev, recipeToToggle];
+                 const recipeToAdd = { ...recipeToToggle };
+                if (!recipeToAdd.imageState) {
+                    recipeToAdd.imageState = recipeToAdd.imageUrl ? 'success' : 'error';
+                }
+                return [...prev, recipeToAdd];
             }
         });
     };
@@ -288,8 +300,8 @@ const App: React.FC = () => {
         setRecipes([]);
         try {
             const generated = await generateRecipes(ingredients, language);
-            const recipesWithIds = generated.map(r => ({ ...r, id: `recipe-${Date.now()}-${Math.random()}` }));
-            setRecipes(recipesWithIds); 
+            const recipesWithIds = generated.map(r => ({ ...r, id: `recipe-${Date.now()}-${Math.random()}`, imageState: 'loading' as ImageState }));
+            setRecipes(recipesWithIds);
             setLoadingMessage(t.loadingImages);
 
             for (const recipe of recipesWithIds) {
@@ -297,22 +309,39 @@ const App: React.FC = () => {
                     const imageUrl = await generateRecipeImage(recipe.recipeName, recipe.description);
                     setRecipes(currentRecipes =>
                         currentRecipes.map(r =>
-                            r.id === recipe.id ? { ...r, imageUrl } : r
+                            r.id === recipe.id ? { ...r, imageUrl, imageState: 'success' as const } : r
                         )
                     );
                 } catch (imgErr) {
-                    console.error(`Failed to generate image for "${recipe.recipeName}":`, imgErr);
                     if (imgErr instanceof Error) {
-                        if (imgErr.message.includes("quota exceeded")) {
+                        // Handle fatal, gracefully handled errors without logging
+                        if (imgErr.message === "QUOTA_EXCEEDED") {
                             setError(t.errorQuotaExceeded);
-                            break;
-                        } else if (imgErr.message === 'API_KEY_INVALID') {
+                            setRecipes(current => current.map(r =>
+                                r.imageState === 'loading' ? { ...r, imageState: 'error_quota' as const } : r
+                            ));
+                            break; 
+                        } 
+                        if (imgErr.message === 'API_KEY_INVALID') {
                             setError(t.errorApiKey);
-                            break;
-                        } else if (imgErr.message === 'IMAGE_GENERATION_FAILED') {
-                            setError(t.errorImageGeneration);
+                            setRecipes(current => current.map(r => r.imageState === 'loading' ? { ...r, imageState: 'error' as const } : r));
                             break;
                         }
+                        
+                        // Handle other, non-fatal image generation errors (and log them)
+                        console.error(`Failed to generate image for "${recipe.recipeName}":`, imgErr);
+                        setError(t.errorImageGeneration);
+                        setRecipes(currentRecipes =>
+                            currentRecipes.map(r =>
+                                r.id === recipe.id ? { ...r, imageState: 'error' as const } : r
+                            )
+                        );
+                    } else {
+                        // Handle and log unknown errors
+                        console.error(`An unknown error occurred while generating image for "${recipe.recipeName}":`, imgErr);
+                        setError(t.errorContent);
+                        setRecipes(current => current.map(r => r.imageState === 'loading' ? { ...r, imageState: 'error' as const } : r));
+                        break;
                     }
                 }
             }
@@ -382,7 +411,7 @@ const App: React.FC = () => {
     };
     
     const handleShareRecipe = useCallback(async (recipe: Recipe) => {
-        const { imageUrl, ...recipeToShare } = recipe;
+        const { imageUrl, imageState, ...recipeToShare } = recipe;
         const compacted = compactRecipe(recipeToShare);
         const recipeString = JSON.stringify(compacted);
         const compressed = pako.deflate(recipeString);

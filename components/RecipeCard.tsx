@@ -1,16 +1,47 @@
 
+
 import React, { useState } from 'react';
-import type { Recipe } from '../types';
+import type { Recipe, ImageState } from '../types';
 import jsPDF from 'jspdf';
 import DifficultyMeter from './DifficultyMeter';
 
-const ImagePlaceholder = () => (
-    <div className="w-full h-64 bg-slate-200 flex items-center justify-center animate-pulse">
-        <svg className="w-12 h-12 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-    </div>
-);
+const localeStrings = {
+    en: {
+        imageFailed: "Image generation failed.",
+        imageFailedQuota: "Image quota exceeded.",
+        plating: "Plating your dish..."
+    },
+    es: {
+        imageFailed: "Falló la generación de imagen.",
+        imageFailedQuota: "Se excedió la cuota de imágenes.",
+        plating: "Emplatando tu platillo..."
+    }
+};
+
+const ImagePlaceholder = ({ state, language }: { state: ImageState | undefined, language: 'en' | 'es' }) => {
+    const t = localeStrings[language];
+    if (state === 'error' || state === 'error_quota') {
+        const message = state === 'error_quota' ? t.imageFailedQuota : t.imageFailed;
+        return (
+            <div className="w-full h-64 bg-slate-100 flex flex-col items-center justify-center text-center p-4 border border-slate-200">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-red-400 mb-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <p className="text-sm font-semibold text-slate-600">{message}</p>
+            </div>
+        );
+    }
+    
+    return (
+        <div className="w-full h-64 bg-slate-200 flex flex-col items-center justify-center animate-pulse">
+            <svg className="w-12 h-12 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+             <p className="text-sm text-slate-500 mt-2">{t.plating}</p>
+        </div>
+    );
+};
+
 
 // Icons for the web view
 const ServingsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zm-1.518 6.025A5.002 5.002 0 0111 15a5 5 0 01-5.482-3.975C3.024 11.455 2 12.834 2 14.5V16h9v-1.5c0-1.666-1.024-3.045-2.518-3.475zM16 6a3 3 0 11-6 0 3 3 0 016 0zm-2.482 5.025C11.024 11.455 10 12.834 10 14.5V16h9v-1.5c0-1.666-1.024-3.045-2.518-3.475A5.002 5.002 0 0115 15a5 5 0 01-1.482-3.975z" /></svg>;
@@ -135,8 +166,8 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
             const metaItems = [
                 { icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAKxJREFUSEvtlt0RgjAMhV82sJM4ijZxBE/gKN7CSXQSkzkCCzZJqEBBiv+BQt/78qF1+KNRn/FLBRADdoAicAZsgA/8wB+wAo7g8z/ACr6AKeAox/geAnY6gS3ABj77BdyAvgJOAm76AlwCVGCz/4DbwAngC+BCZr8CN4ATwCZgAsn8CrgBnACSABPY5FfAUUAioAowAdb+Ap4CsgJq/7P+BVwNdB74J9j/o6BT8U8AB2C1t3B+QOcjR94O6Nv2gPdv+E01/AJcAH/AZj8D514B/4A35fuC+/0PsNkH/P2fa/wBCc0yL8hL1hAAAAAASUVORK5CYII=', label: language === 'es' ? 'Raciones' : 'Servings', value: recipe.servings.toString() },
                 { icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAANhJREFUSEvtlt0RgjAMhV82sJM4ijZxBE/gKN7CSXQSkzkCCzZJqEBBiv+BQp/35UNT1+BPof6FLwxSByyBE+AUeAWOwLwfYA+4Aoeg8z/Aij6BJ8ElzvE9BOx2AduAC3z2C7gC4AAnAc99AS4BOrDVP+AW4ATwBDiEzX4FbgFOAJsAE9jsV+AW4ASQCrCBDX4FPAUEAooAI7DtS+ApIC2g6r9tL4FXgU4D/wT7/xR0Kf4JYAGs9g7OD+h8xMjbAX3bPeD9C35TDX8CToA/YbOfgHOvgH/A2/J9wf3+D7DZd/z9X9f4A0sF8nUAAAAASUVORK5CYII=', label: 'Prep', value: recipe.prepTime },
-                { icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAOpJREFUSEvtltsNwjAMRF82YAPGYANs0G5QGyQDaIM2gQ1gAxuIECX+U1IixonlU+lT3++9Azgb6vww/9YBHHASbAIvwBtwwxfgG7gFFuHzP4Bt/AAvgUcc42sI2PgEtgEb+Myv4BPgAZKA574AF4BU/w2/AS4AH4Av4DK/AQ/AE4AEwAQ4+RW4AjwDJAITWOAn4ClQEQAFMAJs/wM8BWQCqf5b/wI8CnQa+D/Y/2PQ5fgngAew2g38H9B5h5E3I/q2O8D7N/yvGv4BHIB/wGY/A879Av4Bb+T3Bff7H2CzD/j+X7P4A1w4MMhO5jV/AAAAAElFTkSuQmCC', label: 'Cook', value: recipe.cookTime },
-                { icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAALhJREFUSEvtlt0NwjAMRV82YAO0wQawAWzQblA3SAbQAdoEG8AEsIEVIsU/SkrEkeLkU+lT3++9Azgb6vww/9YBHHASbAIvwBtwwxfgG7gFFuHzP4Bt/AAvgUcc42sI2PgEtgEb+Myv4BPgAZKA574AF4BU/w2/AS4AH4Av4DK/AQ/AE4AEwAQ4+RW4AjwDJAITWOAn4ClQEQAFMAJs/wM8BWQCqf5b/wI8CnQa+D/Y/2PQ5fgngAew2g38H9B5h5E3I/q2O8D7N/yvGv4BHIB/wGY/A879Av4Bb+T3Bff7H2CzD/j+X7P4A26wL2I5/5AAAAAASUVORK5CYII=', label: language === 'es' ? 'Calorías' : 'Calories', value: `~${recipe.calories} kcal` },
+                { icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAQlJREFUSEvtlk0rRGEUhL+dDRuZKdlYKIuFbCyUvYB5A2VjY2VnYWNhJR+A/8Je8BKyUFJyYyV2WspKHsQe7DPemZn7N+vUedb3m7VnndM0sVgsFvwfXgHmgDPAEvgd2AG2gVvAFHCLXflvIAIvgS3gBjiC4e2vAFdAEdgCTgE7gBtAInCX5VdANwASeB+4BRwCTgMvgd/AejgBmgE3gVcAF3h76gCtwAdgGXgNfCezn8C9GwbwQ0k0A9YA54DfwOYA2wD5v6UD6LoQ+f8DLAHXgR3gBtBcb3a2gf8/AXgD7M3c58G9G0P5wAygJvB450Y8+24E/B+40dGkK5A85r9m5Z+2k2up/a+5qX/8A8AacWd1s/wZvgAAAABJRU5ErkJggg==', label: 'Cook', value: recipe.cookTime },
+                { icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAOxJREFUSEvtlk0rRGEUxL954TQlS0sWSjYWNpSFCpYyUFZ2hYVn4TNYKdkoyUaKslAyUFL5FfhX+bT13vO9e890Tp1zfvec+5wzDUMsFkv8H14Ad4A5oA38AryBFfAUuAGv4Mgu/DeQC5wA54Ap+Nz+C3ABXAEngUvAOrAAhOCuyn8BmgF3gZvAFvCezgGfgUvAE7AGfAMeAXH8DbgBPAf04d49BOhP3wP7gS+B2Q5sJ5H/L5QA90DkgTPAZl22gf8/QeYAjy/5PKC3b0w4AZQDF4H7OzbhrdsA+D9wp9MkrwHyWf81o/+0i2ulpf+1d/WTf/wBxK1hZz16/1MAAAAASUVORK5CYII=', label: language === 'es' ? 'Calorías' : 'Calories', value: `~${recipe.calories} kcal` },
             ];
 
             const metaColWidth = contentW / 4;
@@ -318,7 +349,11 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
                 </svg>
             </button>
 
-            {recipe.imageUrl ? <img src={recipe.imageUrl} alt={recipe.recipeName} className="w-full h-64 object-cover" /> : <ImagePlaceholder />}
+            {recipe.imageState === 'success' && recipe.imageUrl ? (
+                <img src={recipe.imageUrl} alt={recipe.recipeName} className="w-full h-64 object-cover" />
+            ) : (
+                <ImagePlaceholder state={recipe.imageState} language={language} />
+            )}
 
             <div className="p-6">
                 <h3 className="text-2xl font-bold text-slate-800 mb-2">{recipe.recipeName}</h3>

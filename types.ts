@@ -1,4 +1,5 @@
 export type Difficulty = 'Very Easy' | 'Easy' | 'Medium' | 'Hard' | 'Expert';
+export type ImageState = 'loading' | 'success' | 'error' | 'error_quota';
 
 export interface NutritionInfo {
   protein: string; // e.g., "30g"
@@ -24,4 +25,5 @@ export interface Recipe {
   servings: number;
   nutrition?: NutritionInfo;
   imageUrl?: string;
+  imageState?: ImageState;
 }
