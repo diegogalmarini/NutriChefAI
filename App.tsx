@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { Recipe, ImageState } from './types';
 import { generateRecipes, generateRecipeImage, identifyIngredientsFromImage } from './services/geminiService';
@@ -138,12 +137,12 @@ const expandRecipe = (compact: any): Omit<Recipe, 'imageState'> => {
 
 
 const NutriChefLogo = () => (
-    <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-green-600">
-        <path d="M14.5 13.25C14.5 12.0074 15.5074 11 16.75 11C17.9926 11 19 12.0074 19 13.25V21H14.5V13.25Z" fill="currentColor" fillOpacity="0.3"/>
-        <path d="M5 13.25C5 12.0074 6.00736 11 7.25 11C8.49264 11 9.5 12.0074 9.5 13.25V21H5V13.25Z" fill="currentColor" fillOpacity="0.3"/>
-        <path d="M9.5 16.25C9.5 15.0074 10.5074 14 11.75 14C12.9926 14 14 15.0074 14 16.25V21H9.5V16.25Z" fill="currentColor" fillOpacity="0.3"/>
-        <path fillRule="evenodd" clipRule="evenodd" d="M12 3.25C12.4142 3.25 12.75 3.58579 12.75 4V8.53554C13.9926 8.53554 15 9.5429 15 10.7855V11.25H9V10.7855C9 9.5429 10.0074 8.53554 11.25 8.53554V4C11.25 3.58579 11.5858 3.25 12 3.25ZM16.5 9.75C16.9142 9.75 17.25 10.0858 17.25 10.5V11.25H19.5V10.75C19.5 8.67893 17.8211 7 15.75 7C14.7364 7 13.844 7.39953 13.187 8.03153C12.8256 8.2431 12.7214 8.7402 12.933 9.10157C13.1445 9.46294 13.6417 9.5671 14.0031 9.35553C14.4442 9.10023 14.9546 8.97341 15.5 9.00638V9.75H16.5ZM8.5 7C6.42893 7 4.75 8.67893 4.75 10.75V11.25H7V10.5C7 10.0858 7.33579 9.75 7.75 9.75H8.5V9.00638C9.04543 8.97341 9.55578 9.10023 9.99691 9.35553C10.3583 9.5671 10.8555 9.46294 11.067 9.10157C11.2786 8.7402 11.1744 8.2431 10.813 8.03153C10.156 7.39953 9.26359 7 8.25 7H8.5Z" fill="currentColor"/>
-    </svg>
+    <div className="bg-black w-12 h-12 flex items-center justify-center rounded-lg shadow-md">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 18H18V20H6V18Z"/>
+            <path d="M12 2C9.24 2 7 4.24 7 7C7 8.33 7.55 9.51 8.44 10.33C7.58 10.74 7 11.55 7 12.5V17H17V12.5C17 11.55 16.42 10.74 15.56 10.33C16.45 9.51 17 8.33 17 7C17 4.24 14.76 2 12 2ZM12 9C10.9 9 10 8.1 10 7C10 5.9 10.9 5 12 5C13.1 5 14 5.9 14 7C14 8.1 13.1 9 12 9Z"/>
+        </svg>
+    </div>
 );
 
 
@@ -431,7 +430,7 @@ const App: React.FC = () => {
 
     const renderGenerator = () => (
         <>
-            <div className="bg-white/70 backdrop-blur-sm rounded-xl shadow-lg p-6 md:p-8 mb-8 border border-slate-200">
+            <div className="bg-white/60 backdrop-blur-sm rounded-xl shadow-lg p-6 md:p-8 mb-8 border border-slate-200">
                 <h2 className="text-2xl font-semibold text-slate-700 mb-4">{t.yourIngredients}</h2>
                 <IngredientInput
                     ingredients={ingredients}
@@ -463,7 +462,7 @@ const App: React.FC = () => {
                 </div>
             )}
 
-            <div className="grid gap-8 grid-cols-1 lg:grid-cols-2">
+            <div className="space-y-16">
                 {recipes.map((recipe) => (
                     <RecipeCard 
                       key={recipe.id} 
@@ -477,9 +476,9 @@ const App: React.FC = () => {
             </div>
 
             {favoriteRecipes.length > 0 && (
-                <section className="mt-16">
-                    <h2 className="text-3xl font-bold text-slate-800 text-center mb-8">{t.myFavoriteRecipes}</h2>
-                    <div className="grid gap-8 grid-cols-1 lg:grid-cols-2">
+                <section className="mt-24">
+                    <h2 className="text-4xl font-bold text-slate-800 text-center mb-12">{t.myFavoriteRecipes}</h2>
+                    <div className="space-y-16">
                         {favoriteRecipes.map((recipe) => (
                             <RecipeCard 
                                 key={recipe.id} 
@@ -497,9 +496,9 @@ const App: React.FC = () => {
     );
     
     const renderSharedRecipe = () => (
-        <div className="w-full">
-            <h2 className="text-3xl font-bold text-slate-800 text-center mb-8">{t.sharedRecipeTitle}</h2>
-            <div className="grid gap-8 grid-cols-1 lg:grid-cols-2 max-w-5xl mx-auto">
+        <div>
+            <h2 className="text-4xl font-bold text-slate-800 text-center mb-12">{t.sharedRecipeTitle}</h2>
+            <div className="max-w-5xl mx-auto">
                  {sharedRecipe && <RecipeCard 
                     key={sharedRecipe.id} 
                     recipe={sharedRecipe} 
@@ -521,40 +520,52 @@ const App: React.FC = () => {
     );
 
     return (
-        <div className="min-h-screen flex flex-col items-center p-4 sm:p-6 lg:p-8 font-sans">
-             <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
-             <ConfirmationModal 
+        <div className="min-h-screen font-sans">
+            <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
+            <ConfirmationModal 
                 isOpen={isModalOpen}
                 initialIngredients={detectedIngredients}
                 onConfirm={handleAddMultipleIngredients}
                 onClose={() => setIsModalOpen(false)}
                 language={language}
              />
-             {showCopyToast && (
+            {showCopyToast && (
                 <div className="fixed bottom-6 right-6 bg-slate-800 text-white py-2 px-4 rounded-lg shadow-lg z-50 animate-fade-in-out">
                     {t.linkCopied}
                 </div>
             )}
             
-            <header className="w-full max-w-5xl text-center mb-10">
-                 <div className="flex justify-end w-full max-w-5xl mx-auto mb-4">
-                    <div className="flex border border-slate-300 rounded-lg p-1 bg-white shadow-sm">
-                        <button onClick={() => setLanguage('en')} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${language === 'en' ? 'bg-green-600 text-white' : 'text-slate-600 hover:bg-green-100'}`}>EN</button>
-                        <button onClick={() => setLanguage('es')} className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${language === 'es' ? 'bg-green-600 text-white' : 'text-slate-600 hover:bg-green-100'}`}>ES</button>
+            <div className="w-full bg-green-500">
+                <header className="w-full max-w-5xl mx-auto flex items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 py-5">
+                    <div className="flex items-center gap-4">
+                        <NutriChefLogo />
+                        <div>
+                            <h1 className="text-3xl font-bold text-white tracking-tight">
+                                {t.title}
+                            </h1>
+                            <p className="text-md text-green-100">{t.subtitle}</p>
+                        </div>
                     </div>
-                </div>
-                <div className="flex flex-col justify-center items-center gap-4">
-                    <NutriChefLogo />
-                    <h1 className="text-4xl sm:text-6xl font-bold text-slate-800 tracking-tight">
-                        {t.title}
-                    </h1>
-                </div>
-                <p className="text-lg text-slate-600 mt-3 max-w-2xl mx-auto">
-                    {t.subtitle}
-                </p>
-            </header>
+                    <div className="flex gap-1 bg-green-600/50 rounded-full p-1">
+                        <button
+                            onClick={() => setLanguage('en')}
+                            className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors ${language === 'en' ? 'bg-white text-green-600' : 'text-white hover:bg-green-500/80'}`}
+                            aria-label="Switch to English"
+                        >
+                            EN
+                        </button>
+                        <button
+                            onClick={() => setLanguage('es')}
+                            className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors ${language === 'es' ? 'bg-white text-green-600' : 'text-white hover:bg-green-500/80'}`}
+                            aria-label="Cambiar a Español"
+                        >
+                            ES
+                        </button>
+                    </div>
+                </header>
+            </div>
 
-            <main className="w-full max-w-5xl">
+            <main className="w-full max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
                 {sharedRecipe ? renderSharedRecipe() : renderGenerator()}
             </main>
         </div>
