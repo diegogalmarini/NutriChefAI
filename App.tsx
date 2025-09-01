@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { Recipe, ImageState } from './types';
-import { generateRecipes, generateRecipeImage, identifyIngredientsFromImage } from './services/geminiService';
+import { generateRecipes, generateRecipeImage, identifyIngredientsFromImage, translateRecipe } from './services/geminiService';
 import IngredientInput from './components/IngredientInput';
 import RecipeCard from './components/RecipeCard';
 import Spinner from './components/Spinner';
@@ -83,7 +83,7 @@ const allEsIngredients = [
 ];
 
 const getRandomIngredients = (): string[] => {
-    const { proteins, vegetables, carbsFats } = allIngredients.en;
+    const { proteins, vegetables, carbsFats } = allIngredients.es; // Default to Spanish
     const randomProtein = proteins[Math.floor(Math.random() * proteins.length)];
     const randomVegetable = vegetables[Math.floor(Math.random() * vegetables.length)];
     const randomCarbFat = carbsFats[Math.floor(Math.random() * carbsFats.length)];
@@ -163,7 +163,7 @@ const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [loadingMessage, setLoadingMessage] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
-    const [language, setLanguage] = useState<'en' | 'es'>('en');
+    const [language, setLanguage] = useState<'en' | 'es'>('es');
     const [sharedRecipe, setSharedRecipe] = useState<Recipe | null>(null);
     const [isScanning, setIsScanning] = useState<boolean>(false);
     const [detectedIngredients, setDetectedIngredients] = useState<string[]>([]);
@@ -236,24 +236,52 @@ const App: React.FC = () => {
 
     useEffect(() => {
         const prevLang = prevLangRef.current;
-        if (prevLang === language || sharedRecipe) return;
-
-        const translateIngredient = (ingredient: string): string => {
-            const lowerCaseIngredient = ingredient.toLowerCase();
-            let index = -1;
-            if (prevLang === 'en' && language === 'es') {
-                index = allEnIngredients.findIndex(ing => ing.toLowerCase() === lowerCaseIngredient);
-                if (index !== -1) return allEsIngredients[index];
-            } else if (prevLang === 'es' && language === 'en') {
-                index = allEsIngredients.findIndex(ing => ing.toLowerCase() === lowerCaseIngredient);
-                if (index !== -1) return allEnIngredients[index];
+        if (prevLang === language) {
+            return; // Don't run on initial render or if language hasn't changed
+        }
+    
+        // --- 1. Translate Input Ingredients ---
+        if (!sharedRecipe) {
+            const translateIngredient = (ingredient: string): string => {
+                const lowerCaseIngredient = ingredient.toLowerCase();
+                let index = -1;
+                if (prevLang === 'en' && language === 'es') {
+                    index = allEnIngredients.findIndex(ing => ing.toLowerCase() === lowerCaseIngredient);
+                    if (index !== -1) return allEsIngredients[index];
+                } else if (prevLang === 'es' && language === 'en') {
+                    index = allEsIngredients.findIndex(ing => ing.toLowerCase() === lowerCaseIngredient);
+                    if (index !== -1) return allEnIngredients[index];
+                }
+                return ingredient;
+            };
+            setIngredients(currentIngredients => currentIngredients.map(translateIngredient));
+        }
+    
+        // --- 2. Translate Displayed Recipes ---
+        const translateAllRecipes = async () => {
+            const translateList = (list: Recipe[]) => Promise.all(
+                list.map(async (recipe) => {
+                    // Pass both source and target language for accurate translation
+                    const translatedFields = await translateRecipe(recipe, language, prevLang);
+                    return { ...recipe, ...translatedFields };
+                })
+            );
+    
+            // Use non-blocking promises to update each list
+            if (recipes.length > 0) {
+                translateList(recipes).then(setRecipes);
             }
-            return ingredient;
+            if (favoriteRecipes.length > 0) {
+                translateList(favoriteRecipes).then(setFavoriteRecipes);
+            }
+            if (sharedRecipe) {
+                translateList([sharedRecipe]).then(translated => setSharedRecipe(translated[0]));
+            }
         };
-
-        setIngredients(currentIngredients => currentIngredients.map(translateIngredient));
+    
+        translateAllRecipes();
         prevLangRef.current = language;
-    }, [language, sharedRecipe]);
+    }, [language]); // This effect should ONLY run when the language changes
 
 
     const handleAddIngredient = (ingredient: string) => {
@@ -416,7 +444,8 @@ const App: React.FC = () => {
         const compressed = pako.deflate(recipeString);
         const encodedString = btoa(String.fromCharCode.apply(null, Array.from(compressed)));
 
-        const url = `${window.location.origin}${window.location.pathname}?recipe=${encodedString}`;
+        const safeEncodedString = encodeURIComponent(encodedString);
+        const url = `${window.location.origin}${window.location.pathname}?recipe=${safeEncodedString}`;
 
         try {
             await navigator.clipboard.writeText(url);
@@ -548,18 +577,18 @@ const App: React.FC = () => {
                     </div>
                     <div className="flex gap-1 bg-green-600/50 rounded-full p-1">
                         <button
-                            onClick={() => setLanguage('en')}
-                            className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors ${language === 'en' ? 'bg-white text-green-600' : 'text-white hover:bg-green-500/80'}`}
-                            aria-label="Switch to English"
-                        >
-                            EN
-                        </button>
-                        <button
                             onClick={() => setLanguage('es')}
                             className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors ${language === 'es' ? 'bg-white text-green-600' : 'text-white hover:bg-green-500/80'}`}
                             aria-label="Cambiar a Español"
                         >
                             ES
+                        </button>
+                        <button
+                            onClick={() => setLanguage('en')}
+                            className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors ${language === 'en' ? 'bg-white text-green-600' : 'text-white hover:bg-green-500/80'}`}
+                            aria-label="Switch to English"
+                        >
+                            EN
                         </button>
                     </div>
                 </header>

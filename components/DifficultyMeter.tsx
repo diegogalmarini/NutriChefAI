@@ -14,15 +14,33 @@ const difficultyLevels: { [key in Difficulty]: number } = {
     'Expert': 5,
 };
 
+const difficultyTranslations: { [key in 'en' | 'es']: { [key in Difficulty]: string } } = {
+    en: {
+        'Very Easy': 'Very Easy',
+        'Easy': 'Easy',
+        'Medium': 'Medium',
+        'Hard': 'Hard',
+        'Expert': 'Expert',
+    },
+    es: {
+        'Very Easy': 'Muy Fácil',
+        'Easy': 'Fácil',
+        'Medium': 'Medio',
+        'Hard': 'Difícil',
+        'Expert': 'Experto',
+    }
+};
+
 const DifficultyMeter: React.FC<DifficultyMeterProps> = ({ difficulty, language }) => {
     const level = difficultyLevels[difficulty] || 1;
     const maxLevel = 5;
+    const displayText = difficultyTranslations[language][difficulty] || difficulty;
 
     return (
         <div>
             <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">{language === 'es' ? 'Dificultad' : 'Difficulty'}</p>
             <div className="flex items-center mt-1">
-                 <p className="text-xl font-bold text-slate-800 mr-3 whitespace-nowrap">{difficulty}</p>
+                 <p className="text-xl font-bold text-slate-800 mr-3 whitespace-nowrap">{displayText}</p>
                  <div className="flex gap-1 items-center">
                     {Array.from({ length: maxLevel }).map((_, index) => (
                         <div

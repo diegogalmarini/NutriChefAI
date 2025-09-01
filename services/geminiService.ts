@@ -1,6 +1,5 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-import type { Recipe } from '../types';
+import type { Recipe, Difficulty } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -109,35 +108,58 @@ export const generateRecipes = async (ingredients: string[], language: 'en' | 'e
 
 For each of the three recipes, provide all the information required by the JSON schema.`;
 
-    try {
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: schema
-            },
-        });
+    const maxRetries = 5; // Increased retries for maximum resilience
+    let lastError: any = null;
+    let delay = 3000; // Increased initial delay to 3 seconds
 
-        const jsonText = response.text.trim();
-        const recipes = JSON.parse(jsonText);
-        return recipes as Omit<Recipe, 'id'>[];
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await ai.models.generateContent({
+                model: model,
+                contents: prompt,
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: schema
+                },
+            });
 
-    } catch (error) {
-        console.error("Error generating recipes from Gemini API:", error);
-        if (error instanceof Error && (error.message.includes('API key not valid') || error.message.includes('API_KEY_INVALID'))) {
-            throw new Error("API_KEY_INVALID");
+            const jsonText = response.text.trim();
+            if (!jsonText) {
+                throw new Error("API returned an empty response. This may be due to safety filters.");
+            }
+            const recipes = JSON.parse(jsonText);
+            
+            if (Array.isArray(recipes) && recipes.length > 0) {
+                return recipes as Omit<Recipe, 'id'>[];
+            } else {
+                 throw new Error("API returned invalid or empty recipe data.");
+            }
+
+        } catch (error) {
+            lastError = error;
+            console.error(`Error generating recipes (Attempt ${attempt}/${maxRetries}):`, error);
+
+            if (error instanceof Error && (error.message.includes('API key not valid') || error.message.includes('API_KEY_INVALID'))) {
+                throw new Error("API_KEY_INVALID"); // Fail fast on critical errors
+            }
+            
+            if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2; // Exponential backoff: 3s, 6s, 12s, 24s
+            }
         }
-        throw new Error("GENERATION_FAILED");
     }
+    
+    console.error("Failed to generate recipes after all retries. Last error:", lastError);
+    throw new Error("GENERATION_FAILED");
 };
 
 
 export const generateRecipeImage = async (recipeName: string, recipeDescription: string): Promise<string> => {
-    const prompt = `A healthy, fresh, and vibrant photo of a freshly prepared "${recipeName}". ${recipeDescription}. Professional food photography, bright natural lighting, minimalist styling, focus on fresh ingredients. The food should look incredibly delicious and nutritious, served on a modern white plate.`;
+    const prompt = `Photorealistic food photography of "${recipeName}". The dish is beautifully plated and is the only subject of the image. Close-up shot, bright natural lighting, clean and modern background. The image must look delicious and appetizing, highlighting the fresh ingredients. ${recipeDescription}. IMPORTANT: The image must NOT contain any people, animals, hands, or landscapes. Focus exclusively on the food.`;
     
-    const maxRetries = 3;
-    let delay = 1000;
+    const maxRetries = 4; // Increased retries
+    let delay = 3000; // Increased initial delay
     let lastError: any = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -167,6 +189,9 @@ export const generateRecipeImage = async (recipeName: string, recipeDescription:
             if (errorStatus === "RESOURCE_EXHAUSTED" || errorMessage.toLowerCase().includes("quota")) {
                 throw new Error("QUOTA_EXCEEDED");
             }
+             if (errorMessage.includes('API key not valid') || errorMessage.includes('API_KEY_INVALID')) {
+                throw new Error("API_KEY_INVALID");
+            }
 
             // For other errors, log and prepare for retry.
             console.error(`Error generating image for "${recipeName}" (Attempt ${attempt}/${maxRetries}):`, error);
@@ -178,14 +203,8 @@ export const generateRecipeImage = async (recipeName: string, recipeDescription:
         }
     }
     
-    // After all retries for non-quota errors, analyze the last error and throw a specific message
-    if (lastError) {
-        const errorMessage = lastError?.error?.message || lastError?.message || JSON.stringify(lastError);
-        if (errorMessage.includes('API key not valid') || errorMessage.includes('API_KEY_INVALID')) {
-            throw new Error("API_KEY_INVALID");
-        }
-    }
-    
+    // After all retries for non-quota errors, throw a generic error
+    console.error(`Failed to generate image for "${recipeName}" after all retries. Last error:`, lastError);
     throw new Error("IMAGE_GENERATION_FAILED");
 };
 
@@ -212,24 +231,130 @@ export const identifyIngredientsFromImage = async (base64ImageData: string, mime
         }
     };
 
+    const maxRetries = 4;
+    let delay = 3000;
+    let lastError: any = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await ai.models.generateContent({
+                model: model,
+                contents: { parts: [imagePart, textPart] },
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: ingredientsSchema,
+                },
+            });
+            const jsonText = response.text.trim();
+            if (!jsonText) {
+                throw new Error("API returned an empty response. This may be due to safety filters.");
+            }
+            const result = JSON.parse(jsonText);
+            return Array.isArray(result) ? result : [];
+
+        } catch (error) {
+            lastError = error;
+            console.error(`Error identifying ingredients (Attempt ${attempt}/${maxRetries}):`, error);
+
+            if (error instanceof Error && (error.message.includes('API key not valid') || error.message.includes('API_KEY_INVALID'))) {
+                throw new Error("API_KEY_INVALID");
+            }
+            
+            if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2;
+            }
+        }
+    }
+    
+    console.error("Failed to identify ingredients after all retries. Last error:", lastError);
+    throw new Error("IDENTIFICATION_FAILED");
+};
+
+const translationSchema = {
+    type: Type.OBJECT,
+    properties: {
+      recipeName: { type: Type.STRING },
+      description: { type: Type.STRING },
+      ingredients: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            quantity: { type: Type.STRING },
+          },
+          required: ['name', 'quantity']
+        }
+      },
+      instructions: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING }
+      },
+      prepTime: { type: Type.STRING },
+      cookTime: { type: Type.STRING },
+      difficulty: { type: Type.STRING },
+      healthTip: { type: Type.STRING },
+    },
+    required: ['recipeName', 'description', 'ingredients', 'instructions', 'prepTime', 'cookTime', 'difficulty', 'healthTip']
+};
+
+export const translateRecipe = async (recipe: Recipe, targetLanguage: 'en' | 'es', sourceLanguage: 'en' | 'es'): Promise<Partial<Recipe>> => {
+    const targetLanguageName = targetLanguage === 'es' ? 'Spanish' : 'English';
+    const sourceLanguageName = sourceLanguage === 'es' ? 'Spanish' : 'English';
+
+    const translatablePart = {
+        recipeName: recipe.recipeName,
+        description: recipe.description,
+        ingredients: recipe.ingredients.map(i => ({ name: i.name, quantity: i.quantity })),
+        instructions: recipe.instructions,
+        prepTime: recipe.prepTime,
+        cookTime: recipe.cookTime,
+        difficulty: recipe.difficulty,
+        healthTip: recipe.healthTip,
+    };
+
+    const prompt = `Translate the following recipe content from ${sourceLanguageName} to ${targetLanguageName}.
+- Translate all text values, including ingredient names, quantities (e.g., 'cup' to 'taza'), instructions, and time units (e.g., 'minutes' to 'minutos').
+- For the 'difficulty' field, translate the value to its ${targetLanguageName} equivalent. The possible English values are: 'Very Easy', 'Easy', 'Medium', 'Hard', 'Expert'. The Spanish equivalents are: 'Muy Fácil', 'Fácil', 'Medio', 'Difícil', 'Experto'.
+- Respond ONLY with a JSON object matching the provided schema.
+
+Recipe to translate:
+${JSON.stringify(translatablePart, null, 2)}`;
+
     try {
         const response = await ai.models.generateContent({
-            model: model,
-            contents: { parts: [imagePart, textPart] },
+            model: "gemini-2.5-flash",
+            contents: prompt,
             config: {
                 responseMimeType: "application/json",
-                responseSchema: ingredientsSchema,
+                responseSchema: translationSchema,
             },
         });
+
         const jsonText = response.text.trim();
-        const result = JSON.parse(jsonText);
-        return Array.isArray(result) ? result : [];
+        const translatedPart = JSON.parse(jsonText);
+        
+        const difficultyMap: { [key: string]: Difficulty } = {
+            'Muy Fácil': 'Very Easy', 'Fácil': 'Easy', 'Medio': 'Medium', 'Difícil': 'Hard', 'Experto': 'Expert',
+            'Very Easy': 'Very Easy', 'Easy': 'Easy', 'Medium': 'Medium', 'Hard': 'Hard', 'Expert': 'Expert'
+        };
+        const mappedDifficulty = difficultyMap[translatedPart.difficulty as string] || recipe.difficulty;
+
+        const translatedIngredients = recipe.ingredients.map((originalIng, index) => ({
+            ...originalIng,
+            name: translatedPart.ingredients[index]?.name || originalIng.name,
+            quantity: translatedPart.ingredients[index]?.quantity || originalIng.quantity,
+        }));
+
+        return {
+            ...translatedPart,
+            difficulty: mappedDifficulty,
+            ingredients: translatedIngredients
+        };
 
     } catch (error) {
-        console.error("Error identifying ingredients from image:", error);
-        if (error instanceof Error && (error.message.includes('API key not valid') || error.message.includes('API_KEY_INVALID'))) {
-            throw new Error("API_KEY_INVALID");
-        }
-        throw new Error("IDENTIFICATION_FAILED");
+        console.error(`Error translating recipe "${recipe.recipeName}":`, error);
+        return {}; // Return empty object on failure to avoid overwriting with bad data
     }
 };

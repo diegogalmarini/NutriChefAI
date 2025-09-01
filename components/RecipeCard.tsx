@@ -219,70 +219,65 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
             });
             yPos += cardH + 10;
             
-            const colGutter = 12, colWidth = (contentW - colGutter) / 2;
+            // --- Single-Column Layout for Ingredients and Instructions (Replaces old 2-column logic) ---
             const bodyBottomMargin = pageH - 25;
-            let initialY = yPos;
-            
-            doc.setFontSize(10).setFont('helvetica', 'normal').setTextColor(colors.mediumText).setLineHeightFactor(1.5);
-            const ingredientItems = recipe.ingredients.map(ing => {
-                const text = `\u2022 ${ing.quantity} ${ing.name}`;
-                const lines = doc.splitTextToSize(text, colWidth);
-                return { lines, height: lines.length * 3.5 * 1.5 };
-            });
-            const instructionItems = recipe.instructions.map((step, i) => {
-                const text = `${i + 1}. ${step}`;
-                const lines = doc.splitTextToSize(text, colWidth);
-                return { lines, height: lines.length * 3.5 * 1.5 + 2 };
-            });
+            let currentY = yPos;
+            const ptToMm = 25.4 / 72;
 
-            let ingIdx = 0, instIdx = 0;
-
-            const drawColumnTitles = (y: number) => {
-                doc.setFontSize(16).setFont('helvetica', 'bold').setTextColor(colors.darkText);
-                if (ingIdx < ingredientItems.length) doc.text(t.ingredients, margin, y);
-                if (instIdx < instructionItems.length) doc.text(t.instructions, margin + colWidth + colGutter, y);
-                return y + 8;
-            };
-
-            let leftY = drawColumnTitles(initialY);
-            let rightY = leftY;
-
-            const addNewPage = () => {
+            const addNewPageForContent = () => {
                 doc.addPage();
                 drawHeader();
-                let newY = headerHeight + 10;
-                leftY = drawColumnTitles(newY);
-                rightY = leftY;
-                doc.setFontSize(10).setFont('helvetica', 'normal').setTextColor(colors.mediumText).setLineHeightFactor(1.5);
+                currentY = headerHeight + 15;
             };
 
-            while (ingIdx < ingredientItems.length || instIdx < instructionItems.length) {
-                let progressThisLoop = false;
-
-                // Try to add to left column
-                if (ingIdx < ingredientItems.length && leftY + ingredientItems[ingIdx].height <= bodyBottomMargin) {
-                    const item = ingredientItems[ingIdx++];
-                    doc.text(item.lines, margin, leftY);
-                    leftY += item.height;
-                    progressThisLoop = true;
+            const addSection = (title: string, items: { text: string, height: number, lines: string[] }[]) => {
+                const TITLE_FONT_SIZE = 16;
+                const TITLE_HEIGHT = TITLE_FONT_SIZE * ptToMm + 6;
+                
+                if (currentY + TITLE_HEIGHT > bodyBottomMargin) {
+                    addNewPageForContent();
                 }
+                doc.setFontSize(TITLE_FONT_SIZE).setFont('helvetica', 'bold').setTextColor(colors.darkText);
+                doc.text(title, margin, currentY);
+                currentY += TITLE_HEIGHT;
+                
+                const BODY_FONT_SIZE = 10;
+                doc.setFontSize(BODY_FONT_SIZE).setFont('helvetica', 'normal').setTextColor(colors.mediumText).setLineHeightFactor(1.5);
 
-                // Try to add to right column
-                if (instIdx < instructionItems.length && rightY + instructionItems[instIdx].height <= bodyBottomMargin) {
-                    const item = instructionItems[instIdx++];
-                    doc.text(item.lines, margin + colWidth + colGutter, rightY);
-                    rightY += item.height;
-                    progressThisLoop = true;
+                for (const item of items) {
+                    if (currentY + item.height > bodyBottomMargin) {
+                        addNewPageForContent();
+                        doc.setFontSize(TITLE_FONT_SIZE).setFont('helvetica', 'bold').setTextColor(colors.darkText);
+                        doc.text(`${title} (${language === 'es' ? 'cont.' : 'cont.'})`, margin, currentY);
+                        currentY += TITLE_HEIGHT;
+                        doc.setFontSize(BODY_FONT_SIZE).setFont('helvetica', 'normal').setTextColor(colors.mediumText);
+                    }
+                    doc.text(item.lines, margin, currentY);
+                    currentY += item.height;
                 }
+            };
+            
+            const BODY_FONT_SIZE = 10;
+            const LINE_HEIGHT_FACTOR = 1.5;
+            const BODY_LINE_HEIGHT = BODY_FONT_SIZE * LINE_HEIGHT_FACTOR * ptToMm;
+            
+            const ingredientItems = recipe.ingredients.map(ing => {
+                const text = `\u2022 ${ing.quantity} ${ing.name}${ing.isStaple ? ` (${t.suggested})` : ''}`;
+                const lines = doc.splitTextToSize(text, contentW);
+                return { text, lines, height: lines.length * BODY_LINE_HEIGHT + 2 };
+            });
 
-                // If no progress was made, but items remain, we must need a new page
-                if (!progressThisLoop && (ingIdx < ingredientItems.length || instIdx < instructionItems.length)) {
-                    addNewPage();
-                }
-            }
+            const instructionItems = recipe.instructions.map((step, i) => {
+                const text = `${i + 1}. ${step}`;
+                const lines = doc.splitTextToSize(text, contentW);
+                return { text, lines, height: lines.length * BODY_LINE_HEIGHT + 4 };
+            });
 
-
-            yPos = Math.max(leftY, rightY);
+            addSection(t.ingredients, ingredientItems);
+            currentY += 8; // Space between sections
+            addSection(t.instructions, instructionItems);
+            
+            yPos = currentY; // Update main yPos for health tip section
             
             if (recipe.healthTip) {
                 const tipTitle = t.healthyTip;
@@ -290,8 +285,8 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
                 const tipBoxHeight = 10 + 5 + (tipTextLines.length * 3.5 * 1.4);
 
                 if (yPos + tipBoxHeight > bodyBottomMargin) {
-                    addNewPage();
-                    yPos = leftY; // Should be the reset Y pos, e.g., headerHeight + 10
+                    addNewPageForContent();
+                    yPos = currentY; 
                 } else {
                     yPos += 5;
                 }
