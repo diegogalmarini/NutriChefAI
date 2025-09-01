@@ -25,6 +25,7 @@ const localeStrings = {
         carbs: 'Carbs',
         fats: 'Fats',
         difficulty: 'Difficulty',
+        cont: 'cont.',
     },
     es: {
         imageFailed: "Falló la generación de imagen.",
@@ -47,6 +48,7 @@ const localeStrings = {
         carbs: 'Carbs',
         fats: 'Grasas',
         difficulty: 'Dificultad',
+        cont: 'cont.',
     }
 };
 
@@ -140,6 +142,8 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
             const pageW = 210, pageH = 297;
             const margin = 15;
             const headerHeight = 35;
+            const contentW = pageW - margin * 2;
+            const bodyBottomMargin = pageH - 25;
 
             doc.setFillColor(colors.background);
             doc.rect(0, 0, pageW, pageH, 'F');
@@ -165,7 +169,6 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
             drawHeader();
             
             let yPos = headerHeight + 15;
-            const contentW = pageW - margin * 2;
             
             doc.setFontSize(26).setFont('helvetica', 'bold').setTextColor(colors.darkText);
             const titleLines = doc.splitTextToSize(recipe.recipeName, contentW);
@@ -219,74 +222,75 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
             });
             yPos += cardH + 10;
             
-            // --- Single-Column Layout for Ingredients and Instructions (Replaces old 2-column logic) ---
-            const bodyBottomMargin = pageH - 25;
-            let currentY = yPos;
-            const ptToMm = 25.4 / 72;
-
-            const addNewPageForContent = () => {
-                doc.addPage();
-                drawHeader();
-                currentY = headerHeight + 15;
-            };
-
-            const addSection = (title: string, items: { text: string, height: number, lines: string[] }[]) => {
+            // --- NEW: Robust Line-by-Line Content Drawing Logic ---
+            // Fix: Moved BODY_FONT_SIZE to this scope to be accessible by health tip box height calculation.
+            const BODY_FONT_SIZE = 10;
+            const drawContentWithPageBreaks = (startY: number) => {
+                let currentY = startY;
+                const ptToMm = 25.4 / 72;
                 const TITLE_FONT_SIZE = 16;
                 const TITLE_HEIGHT = TITLE_FONT_SIZE * ptToMm + 6;
-                
-                if (currentY + TITLE_HEIGHT > bodyBottomMargin) {
-                    addNewPageForContent();
-                }
-                doc.setFontSize(TITLE_FONT_SIZE).setFont('helvetica', 'bold').setTextColor(colors.darkText);
-                doc.text(title, margin, currentY);
-                currentY += TITLE_HEIGHT;
-                
-                const BODY_FONT_SIZE = 10;
-                doc.setFontSize(BODY_FONT_SIZE).setFont('helvetica', 'normal').setTextColor(colors.mediumText).setLineHeightFactor(1.5);
+                const LINE_HEIGHT_FACTOR = 1.5;
+                const BODY_LINE_HEIGHT = BODY_FONT_SIZE * LINE_HEIGHT_FACTOR * ptToMm;
+            
+                const addNewPage = () => {
+                    doc.addPage();
+                    drawHeader();
+                    return headerHeight + 15;
+                };
 
-                for (const item of items) {
-                    if (currentY + item.height > bodyBottomMargin) {
-                        addNewPageForContent();
-                        doc.setFontSize(TITLE_FONT_SIZE).setFont('helvetica', 'bold').setTextColor(colors.darkText);
-                        doc.text(`${title} (${language === 'es' ? 'cont.' : 'cont.'})`, margin, currentY);
-                        currentY += TITLE_HEIGHT;
-                        doc.setFontSize(BODY_FONT_SIZE).setFont('helvetica', 'normal').setTextColor(colors.mediumText);
+                const sections = [
+                    { title: t.ingredients, items: recipe.ingredients.map(ing => `\u2022 ${ing.quantity} ${ing.name}${ing.isStaple ? ` (${t.suggested})` : ''}`) },
+                    { title: t.instructions, items: recipe.instructions.map((step, i) => `${i + 1}. ${step}`) }
+                ];
+
+                for (let i = 0; i < sections.length; i++) {
+                    const section = sections[i];
+                    
+                    if (i > 0) currentY += 8;
+
+                    if (currentY + TITLE_HEIGHT > bodyBottomMargin) {
+                        currentY = addNewPage();
                     }
-                    doc.text(item.lines, margin, currentY);
-                    currentY += item.height;
+                    doc.setFontSize(TITLE_FONT_SIZE).setFont('helvetica', 'bold').setTextColor(colors.darkText);
+                    doc.text(section.title, margin, currentY);
+                    currentY += TITLE_HEIGHT;
+
+                    doc.setFontSize(BODY_FONT_SIZE).setFont('helvetica', 'normal').setTextColor(colors.mediumText).setLineHeightFactor(LINE_HEIGHT_FACTOR);
+                    
+                    for (let itemIndex = 0; itemIndex < section.items.length; itemIndex++) {
+                        const item = section.items[itemIndex];
+                        const lines = doc.splitTextToSize(item, contentW);
+                        
+                        if (itemIndex > 0) currentY += 4;
+
+                        for (const line of lines) {
+                            if (currentY + BODY_LINE_HEIGHT > bodyBottomMargin) {
+                                currentY = addNewPage();
+                                doc.setFontSize(TITLE_FONT_SIZE).setFont('helvetica', 'bold').setTextColor(colors.darkText);
+                                doc.text(`${section.title} (${t.cont})`, margin, currentY);
+                                currentY += TITLE_HEIGHT;
+                                doc.setFontSize(BODY_FONT_SIZE).setFont('helvetica', 'normal').setTextColor(colors.mediumText).setLineHeightFactor(LINE_HEIGHT_FACTOR);
+                            }
+                            doc.text(line, margin, currentY);
+                            currentY += BODY_LINE_HEIGHT;
+                        }
+                    }
                 }
+                return currentY;
             };
-            
-            const BODY_FONT_SIZE = 10;
-            const LINE_HEIGHT_FACTOR = 1.5;
-            const BODY_LINE_HEIGHT = BODY_FONT_SIZE * LINE_HEIGHT_FACTOR * ptToMm;
-            
-            const ingredientItems = recipe.ingredients.map(ing => {
-                const text = `\u2022 ${ing.quantity} ${ing.name}${ing.isStaple ? ` (${t.suggested})` : ''}`;
-                const lines = doc.splitTextToSize(text, contentW);
-                return { text, lines, height: lines.length * BODY_LINE_HEIGHT + 2 };
-            });
 
-            const instructionItems = recipe.instructions.map((step, i) => {
-                const text = `${i + 1}. ${step}`;
-                const lines = doc.splitTextToSize(text, contentW);
-                return { text, lines, height: lines.length * BODY_LINE_HEIGHT + 4 };
-            });
-
-            addSection(t.ingredients, ingredientItems);
-            currentY += 8; // Space between sections
-            addSection(t.instructions, instructionItems);
-            
-            yPos = currentY; // Update main yPos for health tip section
+            yPos = drawContentWithPageBreaks(yPos);
             
             if (recipe.healthTip) {
                 const tipTitle = t.healthyTip;
                 const tipTextLines = doc.splitTextToSize(recipe.healthTip, contentW - 15);
-                const tipBoxHeight = 10 + 5 + (tipTextLines.length * 3.5 * 1.4);
+                const tipBoxHeight = 10 + 5 + (tipTextLines.length * BODY_FONT_SIZE * 0.35 * 1.4);
 
                 if (yPos + tipBoxHeight > bodyBottomMargin) {
-                    addNewPageForContent();
-                    yPos = currentY; 
+                    yPos = headerHeight + 15;
+                    doc.addPage();
+                    drawHeader();
                 } else {
                     yPos += 5;
                 }
@@ -401,7 +405,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
                     </div>
                 )}
 
-                <div className="mt-8 pt-6 border-t border-slate-200 flex items-center justify-center gap-2">
+                <div className="mt-8 pt-6 border-t border-slate-200 flex flex-wrap items-center justify-center gap-2">
                     <button 
                         onClick={() => onToggleFavorite(recipe)}
                         className={`p-2 rounded-full transition-colors flex items-center gap-2 px-4 text-sm font-medium ${isFavorite ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}

@@ -39,8 +39,8 @@ const DifficultyMeter: React.FC<DifficultyMeterProps> = ({ difficulty, language 
     return (
         <div>
             <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">{language === 'es' ? 'Dificultad' : 'Difficulty'}</p>
-            <div className="flex items-center mt-1">
-                 <p className="text-xl font-bold text-slate-800 mr-3 whitespace-nowrap">{displayText}</p>
+            <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-start mt-1 gap-1 sm:gap-2">
+                 <p className="text-lg sm:text-xl font-bold text-slate-800">{displayText}</p>
                  <div className="flex gap-1 items-center">
                     {Array.from({ length: maxLevel }).map((_, index) => (
                         <div
