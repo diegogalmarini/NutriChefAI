@@ -565,7 +565,7 @@ const App: React.FC = () => {
             )}
             
             <div className="w-full bg-green-500">
-                <header className="w-full max-w-5xl mx-auto flex items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 py-5">
+                <header className="w-full max-w-5xl mx-auto flex flex-col sm:flex-row items-center sm:justify-between gap-4 px-4 sm:px-6 lg:px-8 py-5">
                     <div className="flex items-center gap-4">
                         <NutriChefLogo />
                         <div>
