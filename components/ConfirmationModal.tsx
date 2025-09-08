@@ -56,7 +56,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, initialIn
                 <h2 className="text-2xl font-bold text-slate-800 mb-2">{t.title}</h2>
                 <p className="text-slate-600 mb-6">{t.instructions}</p>
                 
-                <div className="max-h-60 overflow-y-auto pr-2 -mr-2 mb-6 space-y-2">
+                <div className="max-h-60 overflow-y-auto pr-2 -mr-2 mb-6 space-y-2 overscroll-contain">
                      {currentIngredients.length > 0 ? (
                         currentIngredients.map(ingredient => (
                             <div key={ingredient} className="flex items-center justify-between bg-green-50 text-green-800 text-sm font-medium px-3 py-2 rounded-lg">

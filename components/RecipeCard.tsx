@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import type { Recipe, ImageState } from '../types';
 import jsPDF from 'jspdf';
@@ -9,6 +10,8 @@ const localeStrings = {
         imageFailedQuota: "Image quota exceeded.",
         plating: "Plating your dish...",
         servings: 'Servings',
+        prep: 'Prep',
+        cook: 'Cook',
         calories: 'Calories',
         ingredients: 'Ingredients',
         instructions: 'Instructions',
@@ -32,6 +35,8 @@ const localeStrings = {
         imageFailedQuota: "Se excedió la cuota de imágenes.",
         plating: "Emplatando tu platillo...",
         servings: 'Raciones',
+        prep: 'Prep',
+        cook: 'Cook',
         calories: 'Calorías',
         ingredients: 'Ingredientes',
         instructions: 'Instrucciones',
@@ -110,33 +115,6 @@ const urlToDataUrl = (url: string): Promise<{ dataUrl: string; width: number; he
     img.src = url;
   });
 
-const svgToPngDataUrl = (svgString: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        // Use btoa to handle SVG string correctly in data URL
-        const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgString)));
-
-        const img = new Image();
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth || 28;
-            canvas.height = img.naturalHeight || 28;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-                reject(new Error("Could not get canvas context"));
-                return;
-            }
-            ctx.drawImage(img, 0, 0);
-            const pngDataUrl = canvas.toDataURL('image/png');
-            resolve(pngDataUrl);
-        };
-        img.onerror = (err) => {
-            reject(new Error(`Failed to load SVG for PDF conversion. Error: ${err}`));
-        };
-        img.src = svgDataUrl;
-    });
-};
-
-
 interface RecipeCardProps {
     recipe: Recipe;
     language: 'en' | 'es';
@@ -151,189 +129,275 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
     
     const handleDownloadPdf = async () => {
         setIsDownloadingPdf(true);
-        try {
+
+        const generateRecipePdf = async (recipeProp: Recipe) => {
             const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-            
-            // --- DOCUMENT SETUP ---
+
+            const difficultyTranslations = {
+                en: { 'Very Easy': 'Very Easy', 'Easy': 'Easy', 'Medium': 'Medium', 'Hard': 'Hard', 'Expert': 'Expert' },
+                es: { 'Very Easy': 'Muy Fácil', 'Easy': 'Fácil', 'Medium': 'Medio', 'Hard': 'Difícil', 'Expert': 'Experto' }
+            };
+
+            const recipeData = {
+                imageUrl: recipeProp.imageUrl,
+                title: recipeProp.recipeName,
+                description: recipeProp.description,
+                stats: {
+                    servings: String(recipeProp.servings),
+                    prepTime: recipeProp.prepTime,
+                    cookTime: recipeProp.cookTime,
+                    calories: `~${recipeProp.calories} kcal`
+                },
+                macros: {
+                    protein: recipeProp.nutrition?.protein || 'N/A',
+                    carbs: recipeProp.nutrition?.carbs || 'N/A',
+                    fats: recipeProp.nutrition?.fats || 'N/A'
+                },
+                difficulty: difficultyTranslations[language][recipeProp.difficulty] || recipeProp.difficulty,
+                ingredients: recipeProp.ingredients.map(ing => `${ing.quantity} ${ing.name}${ing.isStaple ? ` (${t.suggested})` : ''}`),
+                instructions: recipeProp.instructions,
+                healthyTip: {
+                    title: t.healthyTip,
+                    text: recipeProp.healthTip
+                }
+            };
+
             const PAGE_W = doc.internal.pageSize.getWidth();
-            const PAGE_H = doc.internal.pageSize.getHeight();
             const MARGIN = 15;
             const CONTENT_W = PAGE_W - MARGIN * 2;
-            const HEADER_H = 25;
-            const FOOTER_H = 15;
             let yPos = 0;
 
             const COLORS = {
-                PRIMARY_GREEN: '#22C55E',
-                DARK_TEXT: '#0F172A',
-                MEDIUM_TEXT: '#475569',
-                LIGHT_TEXT: '#94A3B8',
-                BG_LIGHT_GRAY: '#F1F5F9',
+                HEADER_GREEN: '#22C55E',
                 WHITE: '#FFFFFF',
+                DARK_TEXT: '#1E293B',
+                MEDIUM_TEXT: '#475569',
+                LIGHT_TEXT: '#9CA3AF',
+                STATS_BG: '#F1F5F9',
                 TIP_BG: '#F0FDF4',
-                TIP_BORDER: '#4ADE80',
-                GREEN_TEXT: '#166534',
+                TIP_BORDER: '#22C55E',
+                TIP_TITLE: '#16A34A'
+            };
+            
+            const drawNutriChefLogo = (doc: jsPDF, x: number, y: number, size: number) => {
+                doc.setFillColor(COLORS.WHITE);
+                doc.setDrawColor(COLORS.WHITE);
+            
+                const r = size / 2;
+                const cx = x + r;
+                const cy = y + r;
+                // Kappa, a constant for approximating circles with Bezier curves
+                const k = r * 0.552284749831;
+            
+                // Define the four cardinal points of the circle
+                const p0 = { x: cx + r, y: cy };     // 3 o'clock
+                const p1 = { x: cx,     y: cy + r }; // 6 o'clock
+                const p2 = { x: cx - r, y: cy };     // 9 o'clock
+                const p3 = { x: cx,     y: cy - r }; // 12 o'clock
+            
+                // Start path at the bottom point (6 o'clock)
+                doc.moveTo(p1.x, p1.y);
+            
+                // Curve 1: From P1 to P2 (bottom-left quadrant)
+                (doc as any).curveTo(
+                    cx - k, cy + r, // Control point 1
+                    cx - r, cy + k, // Control point 2
+                    p2.x, p2.y      // End point (P2)
+                );
+            
+                // Curve 2: From P2 to P3 (top-left quadrant)
+                (doc as any).curveTo(
+                    cx - r, cy - k, // Control point 1
+                    cx - k, cy - r, // Control point 2
+                    p3.x, p3.y      // End point (P3)
+                );
+                
+                // Curve 3: From P3 to P0 (top-right quadrant)
+                (doc as any).curveTo(
+                    cx + k, cy - r, // Control point 1
+                    cx + r, cy - k, // Control point 2
+                    p0.x, p0.y      // End point (P0)
+                );
+            
+                // Curve 4 (The cutout): An inward curve from P0 back to P1
+                // This replaces the standard bottom-right quadrant curve.
+                // The control points are pulled inwards to create the "leaf" shape.
+                (doc as any).curveTo(
+                    cx + r,       cy + r * 0.4,  // Control point 1 (pulls down from P0)
+                    cx + r * 0.4, cy + r,        // Control point 2 (pulls left from P1)
+                    p1.x, p1.y                   // End point (P1)
+                );
+            
+                // Fill the completed path
+                doc.fill();
             };
 
-            const chefHatLogo = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="white"><path d="M6 18H18V20H6V18Z"/><path d="M12 2C9.24 2 7 4.24 7 7C7 8.33 7.55 9.51 8.44 10.33C7.58 10.74 7 11.55 7 12.5V17H17V12.5C17 11.55 16.42 10.74 15.56 10.33C16.45 9.51 17 8.33 17 7C17 4.24 14.76 2 12 2ZM12 9C10.9 9 10 8.1 10 7C10 5.9 10.9 5 12 5C13.1 5 14 5.9 14 7C14 8.1 13.1 9 12 9Z"/></svg>`;
-            const logoPngDataUrl = await svgToPngDataUrl(chefHatLogo);
-
-            // --- PDF GENERATION START ---
-            doc.setFillColor(COLORS.BG_LIGHT_GRAY);
-            doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
-
             // --- HEADER ---
-            doc.setFillColor(COLORS.PRIMARY_GREEN);
-            doc.rect(0, 0, PAGE_W, HEADER_H, 'F');
-            doc.addImage(logoPngDataUrl, 'PNG', MARGIN, 6, 13, 13);
-            doc.setFontSize(16).setFont('helvetica', 'bold').setTextColor(COLORS.WHITE);
-            doc.text("NutriChef", MARGIN + 16, 12);
-            doc.setFontSize(9).setFont('helvetica', 'normal');
-            const subtitle = language === 'es' ? "Platos saludables con tus ingredientes, en segundos." : "Healthy meals from your ingredients, in seconds.";
-            doc.text(subtitle, MARGIN + 16, 17);
-            yPos = HEADER_H + 10;
+            doc.setFillColor(COLORS.HEADER_GREEN);
+            doc.rect(0, 0, PAGE_W, 30, 'F');
 
-            // --- TITLE & DESCRIPTION ---
-            doc.setFontSize(24).setFont('helvetica', 'bold').setTextColor(COLORS.DARK_TEXT);
-            const titleLines = doc.splitTextToSize(recipe.recipeName, CONTENT_W);
-            doc.text(titleLines, PAGE_W / 2, yPos, { align: 'center' });
-            yPos += titleLines.length * 8.5;
+            const logoSize = 12;
+            const logoPadding = 4;
+            drawNutriChefLogo(doc, MARGIN, (30 - logoSize) / 2, logoSize);
+            
+            const textStartX = MARGIN + logoSize + logoPadding;
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(20);
+            doc.setTextColor(COLORS.WHITE);
+            doc.text("NutriChef", textStartX, 15);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(11);
+            doc.text(language === 'es' ? "Platos saludables con tus ingredientes, en segundos." : "Healthy meals from your ingredients, in seconds.", textStartX, 22);
+            yPos = 30 + 12;
 
-            doc.setFontSize(11).setFont('helvetica', 'normal').setTextColor(COLORS.MEDIUM_TEXT);
-            const descLines = doc.splitTextToSize(recipe.description, CONTENT_W - 10);
-            doc.text(descLines, PAGE_W / 2, yPos, { align: 'center' });
-            yPos += descLines.length * 4.5 + 5;
-
-            // --- RECIPE IMAGE ---
-            if (recipe.imageUrl) {
+            // --- IMAGE ---
+            if (recipeData.imageUrl) {
                 try {
-                    const { dataUrl, width, height } = await urlToDataUrl(recipe.imageUrl);
-                    const imgHeight = 55;
-                    const imgWidth = imgHeight * (width / height);
+                    const { dataUrl, width, height } = await urlToDataUrl(recipeData.imageUrl);
+                    const aspectRatio = width / height;
+                    const imgWidth = 120;
+                    const imgHeight = imgWidth / aspectRatio;
                     const imgX = (PAGE_W - imgWidth) / 2;
-                    doc.saveGraphicsState();
-                    doc.roundedRect(imgX, yPos, imgWidth, imgHeight, 5, 5);
-                    doc.clip();
                     doc.addImage(dataUrl, 'JPEG', imgX, yPos, imgWidth, imgHeight);
-                    doc.restoreGraphicsState();
-                    yPos += imgHeight + 8;
+                    yPos += imgHeight + 10;
                 } catch (e) {
-                    console.error("Could not load image for PDF:", e);
-                    yPos += 10; // Add space even if image fails
-                }
-            } else {
-                yPos += 10;
-            }
-
-            // --- INFO & NUTRITION CARD ---
-            const cardStartY = yPos;
-            const infoItems = [
-                { l: t.servings.toUpperCase(), v: String(recipe.servings) },
-                { l: 'PREP', v: recipe.prepTime },
-                { l: 'COOK', v: recipe.cookTime },
-                { l: t.calories.toUpperCase(), v: `~${recipe.calories} kcal` },
-            ];
-            doc.setFillColor(COLORS.WHITE).setDrawColor(COLORS.WHITE);
-            doc.roundedRect(MARGIN, cardStartY, CONTENT_W, 25, 5, 5, 'FD');
-            const infoCardW = CONTENT_W / 4;
-            infoItems.forEach((item, i) => {
-                const cardX = MARGIN + i * infoCardW;
-                doc.setFontSize(7).setTextColor(COLORS.LIGHT_TEXT).setFont('helvetica', 'bold');
-                doc.text(item.l, cardX + infoCardW / 2, cardStartY + 6, { align: 'center' });
-                doc.setFontSize(10).setTextColor(COLORS.DARK_TEXT).setFont('helvetica', 'bold');
-                doc.text(item.v, cardX + infoCardW / 2, cardStartY + 11, { align: 'center' });
-            });
-            
-            const nutritionItems = [
-                { l: t.protein.toUpperCase(), v: recipe.nutrition?.protein || 'N/A' },
-                { l: t.carbs.toUpperCase(), v: recipe.nutrition?.carbs || 'N/A' },
-                { l: t.fats.toUpperCase(), v: recipe.nutrition?.fats || 'N/A' },
-            ];
-            const nutritionW = (CONTENT_W / 4) * 3;
-            const nutritionItemW = nutritionW / 3;
-            nutritionItems.forEach((item, i) => {
-                const itemX = MARGIN + i * nutritionItemW;
-                doc.setFontSize(7).setTextColor(COLORS.LIGHT_TEXT).setFont('helvetica', 'bold');
-                doc.text(item.l, itemX + nutritionItemW / 2, cardStartY + 17, { align: 'center' });
-                doc.setFontSize(10).setTextColor(COLORS.GREEN_TEXT).setFont('helvetica', 'bold');
-                doc.text(item.v, itemX + nutritionItemW / 2, cardStartY + 22, { align: 'center' });
-            });
-            
-            const difficultyX = MARGIN + nutritionW;
-            doc.setFontSize(7).setTextColor(COLORS.LIGHT_TEXT).setFont('helvetica', 'bold');
-            doc.text(t.difficulty.toUpperCase(), difficultyX + infoCardW / 2, cardStartY + 17, { align: 'center' });
-            const difficultyMap = { 'Very Easy': 1, 'Easy': 2, 'Medium': 3, 'Hard': 4, 'Expert': 5 };
-            const difficultyLevel = difficultyMap[recipe.difficulty] || 1;
-            for(let i = 0; i < 5; i++) {
-                doc.setFillColor(i < difficultyLevel ? COLORS.PRIMARY_GREEN : '#E2E8F0');
-                const barX = difficultyX + (infoCardW / 2) - 15 + (i * 6.5);
-                doc.roundedRect(barX, cardStartY + 20, 5.5, 2.5, 1, 1, 'F');
-            }
-            yPos = cardStartY + 25 + 8;
-
-            // --- INGREDIENTS AND INSTRUCTIONS COLUMNS ---
-            const columnStartY = yPos;
-            let yLeft = columnStartY;
-            let yRight = columnStartY;
-            const colWidth = (CONTENT_W - 10) / 2;
-            const col1X = MARGIN;
-            const col2X = MARGIN + colWidth + 10;
-            const FONT_SIZE_BODY = 9.5;
-            const LINE_HEIGHT = 1.4;
-            const PT_TO_MM = 0.352778;
-
-            doc.setFontSize(14).setFont('helvetica', 'bold').setTextColor(COLORS.DARK_TEXT);
-            doc.text(t.ingredients, col1X, yLeft);
-            yLeft += 7;
-            doc.setFontSize(FONT_SIZE_BODY).setFont('helvetica', 'normal').setTextColor(COLORS.MEDIUM_TEXT).setLineHeightFactor(LINE_HEIGHT);
-            
-            const ingredientItems = recipe.ingredients.map(ing => `\u2022 ${ing.quantity} ${ing.name}${ing.isStaple ? ` (${t.suggested})` : ''}`);
-            ingredientItems.forEach(item => {
-                const lines = doc.splitTextToSize(item, colWidth);
-                const textHeight = lines.length * FONT_SIZE_BODY * PT_TO_MM * LINE_HEIGHT;
-                if (yLeft + textHeight > PAGE_H - FOOTER_H) return;
-                doc.text(lines, col1X, yLeft);
-                yLeft += textHeight + 1;
-            });
-
-            doc.setFontSize(14).setFont('helvetica', 'bold').setTextColor(COLORS.DARK_TEXT);
-            doc.text(t.instructions, col2X, yRight);
-            yRight += 7;
-            doc.setFontSize(FONT_SIZE_BODY).setFont('helvetica', 'normal').setTextColor(COLORS.MEDIUM_TEXT).setLineHeightFactor(LINE_HEIGHT);
-            
-            recipe.instructions.forEach((step) => {
-                const itemText = `${recipe.instructions.indexOf(step) + 1}. ${step}`;
-                const lines = doc.splitTextToSize(itemText, colWidth);
-                const textHeight = lines.length * FONT_SIZE_BODY * PT_TO_MM * LINE_HEIGHT;
-                if (yRight + textHeight > PAGE_H - FOOTER_H) return;
-                doc.text(lines, col2X, yRight);
-                yRight += textHeight + 2;
-            });
-
-            yPos = Math.max(yLeft, yRight) + 5;
-            
-            // --- HEALTHY TIP (if it fits) ---
-            if (recipe.healthTip) {
-                const tipLines = doc.splitTextToSize(recipe.healthTip, CONTENT_W - 10);
-                const tipBoxHeight = 8 + (tipLines.length * 9 * PT_TO_MM * 1.4);
-                if (yPos + tipBoxHeight < PAGE_H - FOOTER_H) {
-                    doc.setFillColor(COLORS.TIP_BG);
-                    doc.roundedRect(MARGIN, yPos, CONTENT_W, tipBoxHeight, 3, 3, 'F');
-                    doc.setDrawColor(COLORS.TIP_BORDER).setLineWidth(0.5);
-                    doc.line(MARGIN + 2, yPos, MARGIN + 2, yPos + tipBoxHeight);
-
-                    doc.setFontSize(10).setFont('helvetica', 'bold').setTextColor(COLORS.GREEN_TEXT);
-                    doc.text(t.healthyTip, MARGIN + 5, yPos + 5);
-                    doc.setFontSize(9).setFont('helvetica', 'normal').setTextColor(COLORS.MEDIUM_TEXT).setLineHeightFactor(1.4);
-                    doc.text(tipLines, MARGIN + 5, yPos + 10);
+                    console.error("Could not add image to PDF", e);
+                    yPos += 10;
                 }
             }
 
+            // --- TITLE & DESC ---
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(24);
+            doc.setTextColor(COLORS.DARK_TEXT);
+            const titleLines = doc.splitTextToSize(recipeData.title, CONTENT_W * 0.9);
+            const titleHeight = doc.getTextDimensions(titleLines).h;
+            doc.text(titleLines, PAGE_W / 2, yPos, { align: 'center' });
+            yPos += titleHeight + 3;
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(11);
+            doc.setTextColor(COLORS.MEDIUM_TEXT);
+            const descLines = doc.splitTextToSize(recipeData.description, CONTENT_W * 0.95);
+            const descHeight = doc.getTextDimensions(descLines).h;
+            doc.text(descLines, PAGE_W / 2, yPos, { align: 'center' });
+            yPos += descHeight + 10;
+
+            // --- STATS BAR ---
+            doc.setFillColor(COLORS.STATS_BG);
+            doc.roundedRect(MARGIN, yPos, CONTENT_W, 20, 5, 5, 'F');
+            const stats = [
+                { label: t.servings.toUpperCase(), value: recipeData.stats.servings },
+                { label: t.prep.toUpperCase(), value: recipeData.stats.prepTime },
+                { label: t.cook.toUpperCase(), value: recipeData.stats.cookTime },
+                { label: t.calories.toUpperCase(), value: recipeData.stats.calories },
+            ];
+            stats.forEach((stat, i) => {
+                const colX = MARGIN + (CONTENT_W / 4) * (i + 0.5);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(7);
+                doc.setTextColor(COLORS.LIGHT_TEXT);
+                doc.text(stat.label, colX, yPos + 8, { align: 'center' });
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(11);
+                doc.setTextColor(COLORS.DARK_TEXT);
+                doc.text(stat.value, colX, yPos + 15, { align: 'center' });
+            });
+            yPos += 20 + 8;
+
+            // --- MACROS & DIFFICULTY ---
+            const macroData = [
+                { label: t.protein.toUpperCase(), value: recipeData.macros.protein, hasBar: true },
+                { label: t.carbs.toUpperCase(), value: recipeData.macros.carbs, hasBar: true },
+                { label: t.fats.toUpperCase(), value: recipeData.macros.fats, hasBar: true },
+                { label: t.difficulty.toUpperCase(), value: recipeData.difficulty, hasBar: false }
+            ];
+            macroData.forEach((item, i) => {
+                const colX = MARGIN + (CONTENT_W / 4) * (i + 0.5);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(7);
+                doc.setTextColor(COLORS.LIGHT_TEXT);
+                doc.text(item.label, colX, yPos, { align: 'center' });
+                doc.setFontSize(11);
+                doc.setTextColor(COLORS.DARK_TEXT);
+                doc.text(item.value, colX, yPos + 7, { align: 'center' });
+                if (item.hasBar) {
+                    doc.setFillColor(COLORS.HEADER_GREEN);
+                    doc.rect(colX - 15, yPos + 11, 30, 2, 'F');
+                }
+            });
+            yPos += 12 + 10;
+
+            // --- 2-COLUMN LAYOUT ---
+            const colStartY = yPos;
+            const COL_GAP = 10;
+            const COL_WIDTH = (CONTENT_W - COL_GAP) / 2;
+            const COL1_X = MARGIN;
+            const COL2_X = MARGIN + COL_WIDTH + COL_GAP;
+            const lineHeight = 1.4;
+
+            // Ingredients Column
+            let yPosLeft = colStartY;
+            doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(COLORS.DARK_TEXT);
+            doc.text(t.ingredients, COL1_X, yPosLeft);
+            yPosLeft += 6;
+            doc.setFont('helvetica', 'normal').setFontSize(9.5).setTextColor(COLORS.MEDIUM_TEXT);
+            recipeData.ingredients.forEach(ing => {
+                const lines = doc.splitTextToSize(ing, COL_WIDTH - 5);
+                const textHeight = doc.getTextDimensions(lines, { lineHeightFactor: lineHeight } as any).h;
+                doc.setFillColor(COLORS.HEADER_GREEN);
+                doc.circle(COL1_X + 1.5, yPosLeft, 1, 'F');
+                doc.text(lines, COL1_X + 5, yPosLeft, { lineHeightFactor: lineHeight });
+                yPosLeft += textHeight + 2;
+            });
+
+            // Instructions Column
+            let yPosRight = colStartY;
+            doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(COLORS.DARK_TEXT);
+            doc.text(t.instructions, COL2_X, yPosRight);
+            yPosRight += 6;
+            doc.setFont('helvetica', 'normal').setFontSize(9.5).setTextColor(COLORS.MEDIUM_TEXT);
+            recipeData.instructions.forEach((step, i) => {
+                const lines = doc.splitTextToSize(step, COL_WIDTH - 8);
+                const textHeight = doc.getTextDimensions(lines, { lineHeightFactor: lineHeight } as any).h;
+                if (yPosRight + textHeight > doc.internal.pageSize.getHeight() - 25) {
+                    return; // Avoid overflowing the page
+                }
+                doc.setFillColor(COLORS.HEADER_GREEN);
+                doc.circle(COL2_X + 2.5, yPosRight + 1, 2.5, 'F');
+                doc.setTextColor(COLORS.WHITE).setFont('helvetica', 'bold').setFontSize(8);
+                doc.text(String(i + 1), COL2_X + 2.5, yPosRight + 2.2, { align: 'center' });
+                doc.setTextColor(COLORS.MEDIUM_TEXT).setFont('helvetica', 'normal').setFontSize(9.5);
+                doc.text(lines, COL2_X + 8, yPosRight, { lineHeightFactor: lineHeight });
+                yPosRight += textHeight + 3;
+            });
+            
+            yPos = Math.max(yPosLeft, yPosRight) + 10;
+
+            // --- HEALTHY TIP ---
+            if(recipeData.healthyTip.text && yPos < doc.internal.pageSize.getHeight() - 35) {
+                doc.setFillColor(COLORS.TIP_BG);
+                const tipLines = doc.splitTextToSize(recipeData.healthyTip.text, CONTENT_W - 15);
+                const tipHeight = doc.getTextDimensions(tipLines, { lineHeightFactor: 1.5 } as any).h + 15;
+                doc.rect(MARGIN, yPos, CONTENT_W, tipHeight, 'F');
+                doc.setFillColor(COLORS.TIP_BORDER);
+                doc.rect(MARGIN, yPos, 2, tipHeight, 'F');
+                doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(COLORS.TIP_TITLE);
+                doc.text(recipeData.healthyTip.title, MARGIN + 10, yPos + 7);
+                doc.setFont('helvetica', 'normal').setFontSize(9.5).setTextColor(COLORS.MEDIUM_TEXT);
+                doc.text(tipLines, MARGIN + 10, yPos + 14, { lineHeightFactor: 1.5 });
+            }
+            
             // --- FOOTER ---
             doc.setFontSize(8).setTextColor(COLORS.LIGHT_TEXT);
-            doc.text("Generated by NutriChef", PAGE_W / 2, PAGE_H - 7, { align: 'center' });
+            doc.text("Generated by NutriChef", PAGE_W / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
             
-            doc.save(`${recipe.recipeName.replace(/\s+/g, '_').toLowerCase()}.pdf`);
+            const sanitizedTitle = recipeData.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            doc.save(`nutrichef_${sanitizedTitle}.pdf`);
+        };
+
+        try {
+            await generateRecipePdf(recipe);
         } catch (error) {
             console.error("Failed to generate PDF:", error);
         } finally {
@@ -351,7 +415,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
             )}
             
             <div className="p-6 md:p-8">
-                <h3 className="text-3xl md:text-4xl font-extrabold text-slate-900">{recipe.recipeName}</h3>
+                <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900">{recipe.recipeName}</h3>
                 <p className="text-slate-600 mt-2">{recipe.description}</p>
                 
                 <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-4 text-center bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -360,11 +424,11 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
                         <p className="text-xl font-bold text-slate-800 mt-1">{recipe.servings}</p>
                     </div>
                      <div>
-                        <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Prep</p>
+                        <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">{t.prep}</p>
                         <p className="text-xl font-bold text-slate-800 mt-1">{recipe.prepTime}</p>
                     </div>
                      <div>
-                        <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Cook</p>
+                        <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">{t.cook}</p>
                         <p className="text-xl font-bold text-slate-800 mt-1">{recipe.cookTime}</p>
                     </div>
                     <div>
@@ -426,7 +490,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
                     </div>
                 )}
 
-                <div className="mt-8 pt-6 border-t border-slate-200 flex flex-wrap items-center justify-center gap-2">
+                <div className="mt-8 pt-6 border-t border-slate-200 flex flex-wrap items-center justify-center gap-4">
                     <button 
                         onClick={() => onToggleFavorite(recipe)}
                         className={`p-2 rounded-full transition-colors flex items-center gap-2 px-4 text-sm font-medium ${isFavorite ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}

@@ -14,8 +14,10 @@ const IngredientInput: React.FC<IngredientInputProps> = ({ ingredients, onAddIng
     const [inputValue, setInputValue] = useState('');
 
     const handleAdd = () => {
-        if (inputValue.trim()) {
-            onAddIngredient(inputValue.trim());
+        const trimmedValue = inputValue.trim();
+        if (trimmedValue) {
+            const newIngredients = trimmedValue.split(',').map(ing => ing.trim()).filter(Boolean);
+            newIngredients.forEach(onAddIngredient);
             setInputValue('');
         }
     };

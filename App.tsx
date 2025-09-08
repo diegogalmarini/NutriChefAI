@@ -5,6 +5,7 @@ import IngredientInput from './components/IngredientInput';
 import RecipeCard from './components/RecipeCard';
 import Spinner from './components/Spinner';
 import ConfirmationModal from './components/ConfirmationModal';
+import NutriChefLogo from './components/NutriChefLogo';
 import pako from 'pako';
 
 const locales = {
@@ -24,6 +25,7 @@ const locales = {
         errorImageGeneration: "Failed to create a healthy image for the recipe. Please try again.",
         errorApiKey: "The application is not configured correctly. Please contact the administrator.",
         errorIdentification: "Failed to identify ingredients from the image. Please try another photo.",
+        errorOffline: "You appear to be offline. Please check your internet connection.",
         loadingRecipes: "Crafting healthy recipes...",
         loadingImages: "Plating your healthy dish...",
         myFavoriteRecipes: "My Favorite Recipes",
@@ -31,6 +33,7 @@ const locales = {
         linkCopied: "Link copied to clipboard!",
         sharedRecipeTitle: "A Recipe Shared With You",
         backToGenerator: "Back to Recipe Generator",
+        retry: "Retry",
     },
     es: {
         title: "NutriChef",
@@ -48,6 +51,7 @@ const locales = {
         errorImageGeneration: "No se pudo crear una imagen para la receta. Por favor, inténtalo de nuevo.",
         errorApiKey: "La aplicación no está configurada correctamente. Por favor, contacta al administrador.",
         errorIdentification: "No se pudieron identificar los ingredientes de la imagen. Por favor, intenta con otra foto.",
+        errorOffline: "Parece que no tienes conexión. Por favor, revisa tu conexión a internet.",
         loadingRecipes: "Creando recetas saludables...",
         loadingImages: "Emplatando tu plato saludable...",
         myFavoriteRecipes: "Mis Recetas Favoritas",
@@ -55,6 +59,7 @@ const locales = {
         linkCopied: "¡Enlace copiado al portapapeles!",
         sharedRecipeTitle: "Una Receta Compartida Contigo",
         backToGenerator: "Volver al Generador de Recetas",
+        retry: "Reintentar",
     }
 };
 
@@ -134,16 +139,6 @@ const expandRecipe = (compact: any): Omit<Recipe, 'imageState'> => {
         } : undefined,
     };
 };
-
-
-const NutriChefLogo = () => (
-    <div className="bg-black w-12 h-12 flex items-center justify-center rounded-lg shadow-md">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
-            <path d="M6 18H18V20H6V18Z"/>
-            <path d="M12 2C9.24 2 7 4.24 7 7C7 8.33 7.55 9.51 8.44 10.33C7.58 10.74 7 11.55 7 12.5V17H17V12.5C17 11.55 16.42 10.74 15.56 10.33C16.45 9.51 17 8.33 17 7C17 4.24 14.76 2 12 2ZM12 9C10.9 9 10 8.1 10 7C10 5.9 10.9 5 12 5C13.1 5 14 5.9 14 7C14 8.1 13.1 9 12 9Z"/>
-        </svg>
-    </div>
-);
 
 
 const App: React.FC = () => {
@@ -317,6 +312,10 @@ const App: React.FC = () => {
     };
 
     const handleGenerateRecipes = useCallback(async () => {
+        if (!navigator.onLine) {
+            setError(t.errorOffline);
+            return;
+        }
         if (ingredients.length === 0) {
             setError(t.errorEmptyIngredients);
             return;
@@ -486,8 +485,21 @@ const App: React.FC = () => {
 
             {error && (
                 <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg shadow-md mb-6" role="alert">
-                    <p className="font-bold">{t.errorTitle}</p>
-                    <p>{error}</p>
+                    <div className="flex justify-between items-start gap-4">
+                        <div>
+                            <p className="font-bold">{t.errorTitle}</p>
+                            <p>{error}</p>
+                        </div>
+                        {error === t.errorGeneration && (
+                            <button
+                                onClick={handleGenerateRecipes}
+                                disabled={isLoading}
+                                className="bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600 transition-colors whitespace-nowrap disabled:bg-red-300"
+                            >
+                                {t.retry}
+                            </button>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -567,7 +579,9 @@ const App: React.FC = () => {
             <div className="w-full bg-green-500">
                 <header className="w-full max-w-5xl mx-auto flex flex-col sm:flex-row items-center sm:justify-between gap-4 px-4 sm:px-6 lg:px-8 py-5">
                     <div className="flex items-center gap-4">
-                        <NutriChefLogo />
+                        <div className="w-12 h-12 flex items-center justify-center">
+                            <NutriChefLogo />
+                        </div>
                         <div>
                             <h1 className="text-3xl font-bold text-white tracking-tight">
                                 {t.title}
