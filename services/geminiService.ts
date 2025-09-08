@@ -358,3 +358,55 @@ ${JSON.stringify(translatablePart, null, 2)}`;
         return {}; // Return empty object on failure to avoid overwriting with bad data
     }
 };
+
+// --- NEW SHARING FUNCTIONS ---
+
+/**
+ * Mocks saving a recipe to a backend and returns a short ID.
+ * Uses localStorage as a simple key-value store.
+ */
+export const saveSharedRecipe = async (recipe: Omit<Recipe, 'id' | 'imageState' | 'imageUrl'>, imageUrl: string | undefined): Promise<string> => {
+    const id = Math.random().toString(36).substring(2, 11); // a 9-char alphanumeric ID
+    const dataToStore = {
+        recipeData: recipe,
+        imageUrl: imageUrl,
+    };
+    
+    try {
+        localStorage.setItem(`shared_recipe_${id}`, JSON.stringify(dataToStore));
+    } catch (e) {
+        console.error("Failed to save shared recipe to localStorage", e);
+        throw new Error('Failed to save recipe for sharing');
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 250)); // Simulate network delay
+    return id;
+};
+
+/**
+ * Mocks retrieving a shared recipe from a backend using its short ID.
+ * Retrieves the data from localStorage.
+ */
+export const getSharedRecipe = async (id: string): Promise<Recipe> => {
+    await new Promise(resolve => setTimeout(resolve, 250)); // Simulate network delay
+
+    try {
+        const storedData = localStorage.getItem(`shared_recipe_${id}`);
+        if (!storedData) {
+            throw new Error('Recipe not found in localStorage');
+        }
+        
+        const { recipeData, imageUrl } = JSON.parse(storedData);
+        
+        // Reconstruct the full Recipe object
+        return {
+            ...recipeData,
+            id: id,
+            imageUrl: imageUrl,
+            imageState: imageUrl ? 'success' : 'error'
+        };
+    } catch (e) {
+        console.error("Failed to retrieve shared recipe from localStorage", e);
+        throw new Error('Failed to retrieve shared recipe');
+    }
+};

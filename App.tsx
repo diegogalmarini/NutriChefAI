@@ -1,12 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { Recipe, ImageState } from './types';
-import { generateRecipes, generateRecipeImage, identifyIngredientsFromImage, translateRecipe } from './services/geminiService';
+import { generateRecipes, generateRecipeImage, identifyIngredientsFromImage, translateRecipe, saveSharedRecipe, getSharedRecipe } from './services/geminiService';
 import IngredientInput from './components/IngredientInput';
 import RecipeCard from './components/RecipeCard';
 import Spinner from './components/Spinner';
 import ConfirmationModal from './components/ConfirmationModal';
 import NutriChefLogo from './components/NutriChefLogo';
-import pako from 'pako';
 
 const locales = {
     en: {
@@ -26,6 +25,7 @@ const locales = {
         errorApiKey: "The application is not configured correctly. Please contact the administrator.",
         errorIdentification: "Failed to identify ingredients from the image. Please try another photo.",
         errorOffline: "You appear to be offline. Please check your internet connection.",
+        errorSharedRecipeNotFound: "The shared recipe could not be found or has expired.",
         loadingRecipes: "Crafting healthy recipes...",
         loadingImages: "Plating your healthy dish...",
         myFavoriteRecipes: "My Favorite Recipes",
@@ -52,6 +52,7 @@ const locales = {
         errorApiKey: "La aplicación no está configurada correctamente. Por favor, contacta al administrador.",
         errorIdentification: "No se pudieron identificar los ingredientes de la imagen. Por favor, intenta con otra foto.",
         errorOffline: "Parece que no tienes conexión. Por favor, revisa tu conexión a internet.",
+        errorSharedRecipeNotFound: "La receta compartida no se pudo encontrar o ha expirado.",
         loadingRecipes: "Creando recetas saludables...",
         loadingImages: "Emplatando tu plato saludable...",
         myFavoriteRecipes: "Mis Recetas Favoritas",
@@ -95,52 +96,6 @@ const getRandomIngredients = (): string[] => {
     return [randomProtein, randomVegetable, randomCarbFat];
 };
 
-// --- Data Compaction/Expansion for Sharing ---
-const compactRecipe = (recipe: Omit<Recipe, 'imageUrl' | 'imageState'>) => {
-    return {
-        v: 1, // Version number
-        id: recipe.id,
-        n: recipe.recipeName,
-        d: recipe.description,
-        g: recipe.ingredients.map(i => [i.name, i.quantity, i.isStaple ? 1 : 0]), // ingredients
-        i: recipe.instructions, // instructions
-        pt: recipe.prepTime,
-        ct: recipe.cookTime,
-        c: recipe.calories,
-        df: recipe.difficulty,
-        h: recipe.healthTip,
-        s: recipe.servings,
-        nu: recipe.nutrition ? [recipe.nutrition.protein, recipe.nutrition.carbs, recipe.nutrition.fats] : undefined,
-    };
-};
-
-const expandRecipe = (compact: any): Omit<Recipe, 'imageState'> => {
-    if (compact.v !== 1) throw new Error("Unsupported recipe version");
-    return {
-        id: compact.id,
-        recipeName: compact.n,
-        description: compact.d,
-        ingredients: compact.g.map((i: [string, string, number]) => ({
-            name: i[0],
-            quantity: i[1],
-            isStaple: i[2] === 1,
-        })),
-        instructions: compact.i,
-        prepTime: compact.pt,
-        cookTime: compact.ct,
-        calories: compact.c,
-        difficulty: compact.df,
-        healthTip: compact.h,
-        servings: compact.s,
-        nutrition: compact.nu ? {
-            protein: compact.nu[0],
-            carbs: compact.nu[1],
-            fats: compact.nu[2],
-        } : undefined,
-    };
-};
-
-
 const App: React.FC = () => {
     const [ingredients, setIngredients] = useState<string[]>([]);
     const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -179,55 +134,29 @@ const App: React.FC = () => {
     }, [favoriteRecipes]);
 
     useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const recipeData = params.get('recipe');
-        if (recipeData) {
-            try {
-                const decodedData = atob(recipeData);
-                const charData = decodedData.split('').map(c => c.charCodeAt(0));
-                const binaryData = new Uint8Array(charData);
-                const decompressed = pako.inflate(binaryData, { to: 'string' });
-                const compact = JSON.parse(decompressed);
-                const decodedRecipe = expandRecipe(compact);
+        const hash = window.location.hash;
+        const match = hash.match(/^#\/share\/([a-zA-Z0-9]+)$/);
 
-                setSharedRecipe({ ...decodedRecipe, imageState: 'loading' });
-                window.history.replaceState({}, document.title, window.location.pathname);
-
-                (async () => {
-                    try {
-                        const imageUrl = await generateRecipeImage(decodedRecipe.recipeName, decodedRecipe.description);
-                        setSharedRecipe(currentRecipe => 
-                            currentRecipe && currentRecipe.id === decodedRecipe.id 
-                                ? { ...currentRecipe, imageUrl, imageState: 'success' } 
-                                : currentRecipe
-                        );
-                    } catch (imgErr) {
-                         console.error(`Failed to regenerate image for shared recipe "${decodedRecipe.recipeName}":`, imgErr);
-                         if (imgErr instanceof Error) {
-                            if (imgErr.message === "QUOTA_EXCEEDED") {
-                                setError(t.errorQuotaExceeded);
-                                setSharedRecipe(current => current ? { ...current, imageState: 'error_quota' } : null);
-                            } else if (imgErr.message === 'API_KEY_INVALID') {
-                                setError(t.errorApiKey);
-                                setSharedRecipe(current => current ? { ...current, imageState: 'error' } : null);
-                            } else {
-                                setError(t.errorImageGeneration);
-                                setSharedRecipe(current => current ? { ...current, imageState: 'error' } : null);
-                            }
-                        } else {
-                             setError(t.errorContent);
-                             setSharedRecipe(current => current ? { ...current, imageState: 'error' } : null);
-                        }
-                    }
-                })();
-
-            } catch (e) {
-                console.error("Failed to parse shared recipe:", e);
-            }
+        if (match) {
+            const recipeId = match[1];
+            (async () => {
+                try {
+                    const recipe = await getSharedRecipe(recipeId);
+                    setSharedRecipe(recipe);
+                    // Clean the URL so a refresh doesn't try to load the shared recipe again
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch (e) {
+                    console.error("Failed to load shared recipe:", e);
+                    setError(t.errorSharedRecipeNotFound);
+                    // Also clean the URL on error
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            })();
         } else {
+            // Default behavior if no shared recipe is in the URL
             setIngredients(getRandomIngredients());
         }
-    }, []);
+    }, []); // Only run on initial app load
 
     useEffect(() => {
         const prevLang = prevLangRef.current;
@@ -437,24 +366,24 @@ const App: React.FC = () => {
     };
     
     const handleShareRecipe = useCallback(async (recipe: Recipe) => {
-        const { imageUrl, imageState, ...recipeToShare } = recipe;
-        const compacted = compactRecipe(recipeToShare);
-        const recipeString = JSON.stringify(compacted);
-        const compressed = pako.deflate(recipeString);
-        const encodedString = btoa(String.fromCharCode.apply(null, Array.from(compressed)));
-
-        const safeEncodedString = encodeURIComponent(encodedString);
-        const url = `${window.location.origin}${window.location.pathname}?recipe=${safeEncodedString}`;
-
         try {
+            const { id, imageState, ...recipeToShare } = recipe;
+
+            // 1. Call the service to save the recipe and get a short ID
+            const sharedId = await saveSharedRecipe(recipeToShare, recipe.imageUrl);
+
+            // 2. Construct the new, clean URL using a hash for SPA routing
+            const url = `${window.location.origin}${window.location.pathname}#/share/${sharedId}`;
+
+            // 3. Copy the URL to the clipboard and show a confirmation toast
             await navigator.clipboard.writeText(url);
             setShowCopyToast(true);
             setTimeout(() => setShowCopyToast(false), 3000);
         } catch (error) {
-            console.error("Failed to copy link:", error);
-            alert("Failed to copy link.");
+            console.error("Failed to create share link:", error);
+            setError(t.errorContent); // Show a generic error to the user
         }
-    }, []);
+    }, [t]);
 
     const renderGenerator = () => (
         <>
@@ -551,7 +480,11 @@ const App: React.FC = () => {
             </div>
              <div className="text-center mt-12">
                 <button
-                    onClick={() => setSharedRecipe(null)}
+                    onClick={() => {
+                        setSharedRecipe(null);
+                        // Ensure the hash is cleared from the URL when going back
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    }}
                     className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300"
                 >
                     {t.backToGenerator}
