@@ -1,5 +1,5 @@
 export type Difficulty = 'Very Easy' | 'Easy' | 'Medium' | 'Hard' | 'Expert';
-export type ImageState = 'loading' | 'success' | 'error' | 'error_quota';
+export type ImageState = 'idle' | 'loading' | 'success' | 'error' | 'error_quota';
 
 export interface NutritionInfo {
   protein: string; // e.g., "30g"

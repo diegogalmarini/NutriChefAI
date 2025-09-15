@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import type { Recipe, ImageState } from '../types';
 import jsPDF from 'jspdf';
@@ -9,6 +8,8 @@ const localeStrings = {
         imageFailed: "Image generation failed.",
         imageFailedQuota: "Image quota exceeded.",
         plating: "Plating your dish...",
+        generateImage: 'Generate Image',
+        imageGenerationPrompt: 'Generate a beautiful, photorealistic image for this recipe.',
         servings: 'Servings',
         prep: 'Prep',
         cook: 'Cook',
@@ -34,6 +35,8 @@ const localeStrings = {
         imageFailed: "Falló la generación de imagen.",
         imageFailedQuota: "Se excedió la cuota de imágenes.",
         plating: "Emplatando tu platillo...",
+        generateImage: 'Generar Imagen',
+        imageGenerationPrompt: 'Genera una imagen hermosa y fotorrealista para esta receta.',
         servings: 'Raciones',
         prep: 'Prep',
         cook: 'Cook',
@@ -57,38 +60,68 @@ const localeStrings = {
     }
 };
 
-const ImagePlaceholder = ({ state, language }: { state: ImageState | undefined, language: 'en' | 'es' }) => {
+interface ImagePlaceholderProps {
+    state: ImageState | undefined;
+    language: 'en' | 'es';
+    onGenerateClick: () => void;
+}
+
+const ImagePlaceholder = ({ state, language, onGenerateClick }: ImagePlaceholderProps) => {
     const t = localeStrings[language];
-    
-    let content;
-    if (state === 'error' || state === 'error_quota') {
-        const message = state === 'error_quota' ? t.imageFailedQuota : t.imageFailed;
-        content = (
-             <div className="flex flex-col items-center justify-center text-center p-4 h-full">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-red-400 mb-2" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                <p className="text-sm font-semibold text-slate-600">{message}</p>
-            </div>
-        );
-    } else {
-        content = (
-             <div className="flex flex-col items-center justify-center text-center p-4 h-full">
-                <svg className="animate-spin h-8 w-8 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <p className="text-sm font-semibold text-slate-500 mt-2">{t.plating}</p>
-             </div>
-        );
-    }
-    
+
+    const renderContent = () => {
+        switch (state) {
+            case 'idle':
+            case undefined:
+                return (
+                    <div className="text-center p-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-16 w-16 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21.12,4.24a1,1,0,0,0-1.12-.22l-6,2.72a1,1,0,0,0-.53.91V19.4a1,1,0,0,0,.52.9l6,2.73a1,1,0,0,0,1.12-.22,1,1,0,0,0,.36-.68V5A1,1,0,0,0,21.12,4.24Z" style={{ strokeWidth: '1.5' }} />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M11,19.4V6.93a1,1,0,0,0-1-1H4a1,1,0,0,0-1,1V19.4a1,1,0,0,0,1,1h6A1,1,0,0,0,11,19.4Z" style={{ strokeWidth: '1.5', fill: 'rgb(203, 213, 225)', stroke: 'rgb(100, 116, 139)' }} />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M11.52,2.69,8.2,1.21a1,1,0,0,0-1.09.21L4.27,3.58a1,1,0,0,0-.27.7v1.65" style={{ strokeWidth: '1.5' }} />
+                        </svg>
+
+                        <p className="mt-2 text-sm text-slate-500 font-medium">{t.imageGenerationPrompt}</p>
+                        <button
+                            onClick={onGenerateClick}
+                            className="mt-4 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-5 rounded-lg transition-all duration-300 transform hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-400"
+                        >
+                            {t.generateImage}
+                        </button>
+                    </div>
+                );
+            case 'error':
+            case 'error_quota':
+                const message = state === 'error_quota' ? t.imageFailedQuota : t.imageFailed;
+                return (
+                    <div className="flex flex-col items-center justify-center text-center p-4 h-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-red-400 mb-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        <p className="text-sm font-semibold text-slate-600">{message}</p>
+                    </div>
+                );
+            case 'loading':
+            default:
+                return (
+                    <div className="flex flex-col items-center justify-center text-center p-4 h-full">
+                        <svg className="animate-spin h-8 w-8 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p className="text-sm font-semibold text-slate-500 mt-2">{t.plating}</p>
+                    </div>
+                );
+        }
+    };
+
     return (
-        <div className="w-full aspect-[16/9] bg-slate-100 flex items-center justify-center">
-            {content}
+        <div className="w-full aspect-[16/9] bg-slate-200 flex items-center justify-center rounded-t-2xl">
+            {renderContent()}
         </div>
     );
 };
+
 
 const urlToDataUrl = (url: string): Promise<{ dataUrl: string; width: number; height: number; }> =>
   new Promise((resolve, reject) => {
@@ -121,9 +154,10 @@ interface RecipeCardProps {
     onToggleFavorite: (recipe: Recipe) => void;
     isFavorite: boolean;
     onShare: (recipe: Recipe) => void;
+    onGenerateImage: (recipeId: string) => void;
 }
 
-const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavorite, isFavorite, onShare }) => {
+const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavorite, isFavorite, onShare, onGenerateImage }) => {
     const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
     const t = localeStrings[language];
     
@@ -156,13 +190,11 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
                 difficulty: difficultyTranslations[language][recipeProp.difficulty] || recipeProp.difficulty,
                 ingredients: recipeProp.ingredients.map(ing => `${ing.quantity} ${ing.name}${ing.isStaple ? ` (${t.suggested})` : ''}`),
                 instructions: recipeProp.instructions,
-                healthyTip: {
-                    title: t.healthyTip,
-                    text: recipeProp.healthTip
-                }
+                healthTip: recipeProp.healthTip
             };
 
             const PAGE_W = doc.internal.pageSize.getWidth();
+            const PAGE_H = doc.internal.pageSize.getHeight();
             const MARGIN = 15;
             const CONTENT_W = PAGE_W - MARGIN * 2;
             let yPos = 0;
@@ -174,118 +206,75 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
                 MEDIUM_TEXT: '#475569',
                 LIGHT_TEXT: '#9CA3AF',
                 STATS_BG: '#F1F5F9',
-                TIP_BG: '#F0FDF4',
-                TIP_BORDER: '#22C55E',
-                TIP_TITLE: '#16A34A'
+                TIP_BG: '#E0F2FE', // sky-100
+                TIP_BORDER: '#7DD3FC', // sky-300
+                TIP_TITLE: '#0C4A6E', // sky-900
+                TIP_TEXT: '#075985' // sky-800
             };
             
             const drawNutriChefLogo = (doc: jsPDF, x: number, y: number, size: number) => {
                 doc.setFillColor(COLORS.WHITE);
                 doc.setDrawColor(COLORS.WHITE);
-            
                 const r = size / 2;
                 const cx = x + r;
                 const cy = y + r;
-                // Kappa, a constant for approximating circles with Bezier curves
-                const k = r * 0.552284749831;
-            
-                // Define the four cardinal points of the circle
-                const p0 = { x: cx + r, y: cy };     // 3 o'clock
-                const p1 = { x: cx,     y: cy + r }; // 6 o'clock
-                const p2 = { x: cx - r, y: cy };     // 9 o'clock
-                const p3 = { x: cx,     y: cy - r }; // 12 o'clock
-            
-                // Start path at the bottom point (6 o'clock)
-                doc.moveTo(p1.x, p1.y);
-            
-                // Curve 1: From P1 to P2 (bottom-left quadrant)
-                (doc as any).curveTo(
-                    cx - k, cy + r, // Control point 1
-                    cx - r, cy + k, // Control point 2
-                    p2.x, p2.y      // End point (P2)
-                );
-            
-                // Curve 2: From P2 to P3 (top-left quadrant)
-                (doc as any).curveTo(
-                    cx - r, cy - k, // Control point 1
-                    cx - k, cy - r, // Control point 2
-                    p3.x, p3.y      // End point (P3)
-                );
-                
-                // Curve 3: From P3 to P0 (top-right quadrant)
-                (doc as any).curveTo(
-                    cx + k, cy - r, // Control point 1
-                    cx + r, cy - k, // Control point 2
-                    p0.x, p0.y      // End point (P0)
-                );
-            
-                // Curve 4 (The cutout): An inward curve from P0 back to P1
-                // This replaces the standard bottom-right quadrant curve.
-                // The control points are pulled inwards to create the "leaf" shape.
-                (doc as any).curveTo(
-                    cx + r,       cy + r * 0.4,  // Control point 1 (pulls down from P0)
-                    cx + r * 0.4, cy + r,        // Control point 2 (pulls left from P1)
-                    p1.x, p1.y                   // End point (P1)
-                );
-            
-                // Fill the completed path
-                doc.fill();
+                doc.circle(cx, cy, r, 'F');
             };
 
             // --- HEADER ---
             doc.setFillColor(COLORS.HEADER_GREEN);
-            doc.rect(0, 0, PAGE_W, 30, 'F');
+            doc.rect(0, 0, PAGE_W, 28, 'F');
 
-            const logoSize = 12;
+            const logoSize = 10;
             const logoPadding = 4;
-            drawNutriChefLogo(doc, MARGIN, (30 - logoSize) / 2, logoSize);
+            drawNutriChefLogo(doc, MARGIN, (28 - logoSize) / 2, logoSize);
             
             const textStartX = MARGIN + logoSize + logoPadding;
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(20);
+            doc.setFontSize(18);
             doc.setTextColor(COLORS.WHITE);
-            doc.text("NutriChef", textStartX, 15);
+            doc.text("NutriChef", textStartX, 14);
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(11);
-            doc.text(language === 'es' ? "Platos saludables con tus ingredientes, en segundos." : "Healthy meals from your ingredients, in seconds.", textStartX, 22);
-            yPos = 30 + 12;
+            doc.setFontSize(10);
+            doc.text(language === 'es' ? "Platos saludables con tus ingredientes, en segundos." : "Healthy meals from your ingredients, in seconds.", textStartX, 20);
+            yPos = 28 + 10;
 
             // --- IMAGE ---
             if (recipeData.imageUrl) {
                 try {
                     const { dataUrl, width, height } = await urlToDataUrl(recipeData.imageUrl);
                     const aspectRatio = width / height;
-                    const imgWidth = 120;
+                    const imgWidth = 75; // Reduced image width
                     const imgHeight = imgWidth / aspectRatio;
                     const imgX = (PAGE_W - imgWidth) / 2;
                     doc.addImage(dataUrl, 'JPEG', imgX, yPos, imgWidth, imgHeight);
-                    yPos += imgHeight + 10;
+                    yPos += imgHeight + 6;
                 } catch (e) {
                     console.error("Could not add image to PDF", e);
-                    yPos += 10;
+                    yPos += 6;
                 }
             }
 
             // --- TITLE & DESC ---
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(24);
+            doc.setFontSize(18);
             doc.setTextColor(COLORS.DARK_TEXT);
             const titleLines = doc.splitTextToSize(recipeData.title, CONTENT_W * 0.9);
             const titleHeight = doc.getTextDimensions(titleLines).h;
             doc.text(titleLines, PAGE_W / 2, yPos, { align: 'center' });
-            yPos += titleHeight + 3;
+            yPos += titleHeight - 2;
 
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(11);
+            doc.setFontSize(9);
             doc.setTextColor(COLORS.MEDIUM_TEXT);
             const descLines = doc.splitTextToSize(recipeData.description, CONTENT_W * 0.95);
             const descHeight = doc.getTextDimensions(descLines).h;
             doc.text(descLines, PAGE_W / 2, yPos, { align: 'center' });
-            yPos += descHeight + 10;
+            yPos += descHeight + 6;
 
             // --- STATS BAR ---
             doc.setFillColor(COLORS.STATS_BG);
-            doc.roundedRect(MARGIN, yPos, CONTENT_W, 20, 5, 5, 'F');
+            doc.roundedRect(MARGIN, yPos, CONTENT_W, 18, 4, 4, 'F');
             const stats = [
                 { label: t.servings.toUpperCase(), value: recipeData.stats.servings },
                 { label: t.prep.toUpperCase(), value: recipeData.stats.prepTime },
@@ -295,15 +284,15 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
             stats.forEach((stat, i) => {
                 const colX = MARGIN + (CONTENT_W / 4) * (i + 0.5);
                 doc.setFont('helvetica', 'bold');
-                doc.setFontSize(7);
+                doc.setFontSize(6);
                 doc.setTextColor(COLORS.LIGHT_TEXT);
-                doc.text(stat.label, colX, yPos + 8, { align: 'center' });
+                doc.text(stat.label, colX, yPos + 7, { align: 'center' });
                 doc.setFont('helvetica', 'normal');
-                doc.setFontSize(11);
+                doc.setFontSize(10);
                 doc.setTextColor(COLORS.DARK_TEXT);
-                doc.text(stat.value, colX, yPos + 15, { align: 'center' });
+                doc.text(stat.value, colX, yPos + 13, { align: 'center' });
             });
-            yPos += 20 + 8;
+            yPos += 18 + 5;
 
             // --- MACROS & DIFFICULTY ---
             const macroData = [
@@ -315,18 +304,18 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
             macroData.forEach((item, i) => {
                 const colX = MARGIN + (CONTENT_W / 4) * (i + 0.5);
                 doc.setFont('helvetica', 'bold');
-                doc.setFontSize(7);
+                doc.setFontSize(6);
                 doc.setTextColor(COLORS.LIGHT_TEXT);
                 doc.text(item.label, colX, yPos, { align: 'center' });
-                doc.setFontSize(11);
+                doc.setFontSize(10);
                 doc.setTextColor(COLORS.DARK_TEXT);
-                doc.text(item.value, colX, yPos + 7, { align: 'center' });
+                doc.text(item.value, colX, yPos + 6, { align: 'center' });
                 if (item.hasBar) {
                     doc.setFillColor(COLORS.HEADER_GREEN);
-                    doc.rect(colX - 15, yPos + 11, 30, 2, 'F');
+                    doc.rect(colX - 15, yPos + 10, 30, 2, 'F');
                 }
             });
-            yPos += 12 + 10;
+            yPos += 12 + 6;
 
             // --- 2-COLUMN LAYOUT ---
             const colStartY = yPos;
@@ -334,17 +323,20 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
             const COL_WIDTH = (CONTENT_W - COL_GAP) / 2;
             const COL1_X = MARGIN;
             const COL2_X = MARGIN + COL_WIDTH + COL_GAP;
-            const lineHeight = 1.4;
+            const lineHeight = 1.3;
 
             // Ingredients Column
             let yPosLeft = colStartY;
-            doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(COLORS.DARK_TEXT);
+            doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(COLORS.DARK_TEXT);
             doc.text(t.ingredients, COL1_X, yPosLeft);
-            yPosLeft += 6;
-            doc.setFont('helvetica', 'normal').setFontSize(9.5).setTextColor(COLORS.MEDIUM_TEXT);
+            yPosLeft += 5;
+            doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(COLORS.MEDIUM_TEXT);
             recipeData.ingredients.forEach(ing => {
                 const lines = doc.splitTextToSize(ing, COL_WIDTH - 5);
                 const textHeight = doc.getTextDimensions(lines, { lineHeightFactor: lineHeight } as any).h;
+                 if (yPosLeft + textHeight > PAGE_H - 25) { // Reserve space for tip & footer
+                    return; 
+                }
                 doc.setFillColor(COLORS.HEADER_GREEN);
                 doc.circle(COL1_X + 1.5, yPosLeft, 1, 'F');
                 doc.text(lines, COL1_X + 5, yPosLeft, { lineHeightFactor: lineHeight });
@@ -353,44 +345,55 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
 
             // Instructions Column
             let yPosRight = colStartY;
-            doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(COLORS.DARK_TEXT);
+            doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(COLORS.DARK_TEXT);
             doc.text(t.instructions, COL2_X, yPosRight);
-            yPosRight += 6;
-            doc.setFont('helvetica', 'normal').setFontSize(9.5).setTextColor(COLORS.MEDIUM_TEXT);
+            yPosRight += 5;
+            doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(COLORS.MEDIUM_TEXT);
             recipeData.instructions.forEach((step, i) => {
                 const lines = doc.splitTextToSize(step, COL_WIDTH - 8);
                 const textHeight = doc.getTextDimensions(lines, { lineHeightFactor: lineHeight } as any).h;
-                if (yPosRight + textHeight > doc.internal.pageSize.getHeight() - 25) {
-                    return; // Avoid overflowing the page
+                if (yPosRight + textHeight > PAGE_H - 25) { // Reserve space for tip & footer
+                    return;
                 }
                 doc.setFillColor(COLORS.HEADER_GREEN);
                 doc.circle(COL2_X + 2.5, yPosRight + 1, 2.5, 'F');
-                doc.setTextColor(COLORS.WHITE).setFont('helvetica', 'bold').setFontSize(8);
+                doc.setTextColor(COLORS.WHITE).setFont('helvetica', 'bold').setFontSize(7);
                 doc.text(String(i + 1), COL2_X + 2.5, yPosRight + 2.2, { align: 'center' });
-                doc.setTextColor(COLORS.MEDIUM_TEXT).setFont('helvetica', 'normal').setFontSize(9.5);
+                doc.setTextColor(COLORS.MEDIUM_TEXT).setFont('helvetica', 'normal').setFontSize(8);
                 doc.text(lines, COL2_X + 8, yPosRight, { lineHeightFactor: lineHeight });
                 yPosRight += textHeight + 3;
             });
             
-            yPos = Math.max(yPosLeft, yPosRight) + 10;
-
+            yPos = Math.max(yPosLeft, yPosRight) + 5;
+            
             // --- HEALTHY TIP ---
-            if(recipeData.healthyTip.text && yPos < doc.internal.pageSize.getHeight() - 35) {
-                doc.setFillColor(COLORS.TIP_BG);
-                const tipLines = doc.splitTextToSize(recipeData.healthyTip.text, CONTENT_W - 15);
-                const tipHeight = doc.getTextDimensions(tipLines, { lineHeightFactor: 1.5 } as any).h + 15;
-                doc.rect(MARGIN, yPos, CONTENT_W, tipHeight, 'F');
-                doc.setFillColor(COLORS.TIP_BORDER);
-                doc.rect(MARGIN, yPos, 2, tipHeight, 'F');
-                doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(COLORS.TIP_TITLE);
-                doc.text(recipeData.healthyTip.title, MARGIN + 10, yPos + 7);
-                doc.setFont('helvetica', 'normal').setFontSize(9.5).setTextColor(COLORS.MEDIUM_TEXT);
-                doc.text(tipLines, MARGIN + 10, yPos + 14, { lineHeightFactor: 1.5 });
+            if (recipeData.healthTip) {
+                const tipBoxPadding = 4;
+                const tipTitleLines = doc.setFont('helvetica', 'bold').setFontSize(9).splitTextToSize(t.healthyTip, CONTENT_W - (tipBoxPadding * 2));
+                const tipTitleHeight = doc.getTextDimensions(tipTitleLines).h;
+                const tipBodyLines = doc.setFont('helvetica', 'normal').setFontSize(8).splitTextToSize(recipeData.healthTip, CONTENT_W - (tipBoxPadding * 2));
+                const tipBodyHeight = doc.getTextDimensions(tipBodyLines).h;
+                const totalTipHeight = tipTitleHeight + tipBodyHeight + tipBoxPadding * 2 + 2;
+
+                if (yPos + totalTipHeight < PAGE_H - 15) { // Check if it fits before footer
+                    doc.setFillColor(COLORS.TIP_BG);
+                    doc.setDrawColor(COLORS.TIP_BORDER);
+                    doc.setLineWidth(0.25);
+                    doc.roundedRect(MARGIN, yPos, CONTENT_W, totalTipHeight, 3, 3, 'FD');
+
+                    let tipTextY = yPos + tipBoxPadding + 1;
+                    doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(COLORS.TIP_TITLE);
+                    doc.text(tipTitleLines, MARGIN + tipBoxPadding, tipTextY);
+                    tipTextY += tipTitleHeight;
+
+                    doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(COLORS.TIP_TEXT);
+                    doc.text(tipBodyLines, MARGIN + tipBoxPadding, tipTextY);
+                }
             }
             
             // --- FOOTER ---
             doc.setFontSize(8).setTextColor(COLORS.LIGHT_TEXT);
-            doc.text("Generated by NutriChef", PAGE_W / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
+            doc.text("Generated by NutriChef", PAGE_W / 2, PAGE_H - 8, { align: 'center' });
             
             const sanitizedTitle = recipeData.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
             doc.save(`nutrichef_${sanitizedTitle}.pdf`);
@@ -411,7 +414,11 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, language, onToggleFavor
             {recipe.imageState === 'success' && recipe.imageUrl ? (
                 <img src={recipe.imageUrl} alt={recipe.recipeName} className="w-full h-64 md:h-80 object-cover" />
             ) : (
-                <ImagePlaceholder state={recipe.imageState} language={language} />
+                 <ImagePlaceholder 
+                    state={recipe.imageState} 
+                    language={language} 
+                    onGenerateClick={() => onGenerateImage(recipe.id)} 
+                />
             )}
             
             <div className="p-6 md:p-8">

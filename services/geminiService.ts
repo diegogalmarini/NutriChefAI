@@ -403,7 +403,7 @@ export const getSharedRecipe = async (id: string): Promise<Recipe> => {
             ...recipeData,
             id: id,
             imageUrl: imageUrl,
-            imageState: imageUrl ? 'success' : 'error'
+            imageState: imageUrl ? 'success' : 'idle'
         };
     } catch (e) {
         console.error("Failed to retrieve shared recipe from localStorage", e);

@@ -104,7 +104,7 @@ const App: React.FC = () => {
             const savedFavorites = localStorage.getItem('nutriChefFavorites');
             const parsed = savedFavorites ? JSON.parse(savedFavorites) : [];
             // Add imageState to old favorites for compatibility
-            return parsed.map((r: Recipe) => ({ ...r, imageState: r.imageUrl ? 'success' : 'error' }));
+            return parsed.map((r: Recipe) => ({ ...r, imageState: r.imageUrl ? 'success' : 'idle' }));
         } catch (error) {
             console.error("Could not load favorites from localStorage", error);
             return [];
@@ -233,7 +233,7 @@ const App: React.FC = () => {
             } else {
                  const recipeToAdd = { ...recipeToToggle };
                 if (!recipeToAdd.imageState) {
-                    recipeToAdd.imageState = recipeToAdd.imageUrl ? 'success' : 'error';
+                    recipeToAdd.imageState = recipeToAdd.imageUrl ? 'success' : 'idle';
                 }
                 return [...prev, recipeToAdd];
             }
@@ -255,51 +255,9 @@ const App: React.FC = () => {
         setRecipes([]);
         try {
             const generated = await generateRecipes(ingredients, language);
-            const recipesWithIds = generated.map(r => ({ ...r, id: `recipe-${Date.now()}-${Math.random()}`, imageState: 'loading' as ImageState }));
+            const recipesWithIds = generated.map(r => ({ ...r, id: `recipe-${Date.now()}-${Math.random()}`, imageState: 'idle' as ImageState }));
             setRecipes(recipesWithIds);
-            setLoadingMessage(t.loadingImages);
-
-            for (const recipe of recipesWithIds) {
-                try {
-                    const imageUrl = await generateRecipeImage(recipe.recipeName, recipe.description);
-                    setRecipes(currentRecipes =>
-                        currentRecipes.map(r =>
-                            r.id === recipe.id ? { ...r, imageUrl, imageState: 'success' as const } : r
-                        )
-                    );
-                } catch (imgErr) {
-                    if (imgErr instanceof Error) {
-                        // Handle fatal, gracefully handled errors without logging
-                        if (imgErr.message === "QUOTA_EXCEEDED") {
-                            setError(t.errorQuotaExceeded);
-                            setRecipes(current => current.map(r =>
-                                r.imageState === 'loading' ? { ...r, imageState: 'error_quota' as const } : r
-                            ));
-                            break; 
-                        } 
-                        if (imgErr.message === 'API_KEY_INVALID') {
-                            setError(t.errorApiKey);
-                            setRecipes(current => current.map(r => r.imageState === 'loading' ? { ...r, imageState: 'error' as const } : r));
-                            break;
-                        }
-                        
-                        // Handle other, non-fatal image generation errors (and log them)
-                        console.error(`Failed to generate image for "${recipe.recipeName}":`, imgErr);
-                        setError(t.errorImageGeneration);
-                        setRecipes(currentRecipes =>
-                            currentRecipes.map(r =>
-                                r.id === recipe.id ? { ...r, imageState: 'error' as const } : r
-                            )
-                        );
-                    } else {
-                        // Handle and log unknown errors
-                        console.error(`An unknown error occurred while generating image for "${recipe.recipeName}":`, imgErr);
-                        setError(t.errorContent);
-                        setRecipes(current => current.map(r => r.imageState === 'loading' ? { ...r, imageState: 'error' as const } : r));
-                        break;
-                    }
-                }
-            }
+            
         } catch (err) {
             if (err instanceof Error) {
                 switch(err.message) {
@@ -319,6 +277,45 @@ const App: React.FC = () => {
             setIsLoading(false);
         }
     }, [ingredients, language, t]);
+
+    const handleGenerateImageForRecipe = useCallback(async (recipeId: string) => {
+        const recipeToUpdate = [...recipes, ...favoriteRecipes].find(r => r.id === recipeId);
+        if (!recipeToUpdate) {
+            console.error("Recipe not found for image generation:", recipeId);
+            return;
+        }
+
+        const updateRecipeState = (id: string, updates: Partial<Recipe>) => {
+            setRecipes(current => current.map(r => r.id === id ? { ...r, ...updates } : r));
+            setFavoriteRecipes(current => current.map(r => r.id === id ? { ...r, ...updates } : r));
+        };
+
+        updateRecipeState(recipeId, { imageState: 'loading' });
+        setError(null); // Clear previous errors
+
+        try {
+            const imageUrl = await generateRecipeImage(recipeToUpdate.recipeName, recipeToUpdate.description);
+            updateRecipeState(recipeId, { imageUrl, imageState: 'success' });
+        } catch (imgErr) {
+            let errorState: ImageState = 'error';
+            let errorMessage = t.errorImageGeneration;
+
+            if (imgErr instanceof Error) {
+                 if (imgErr.message === "QUOTA_EXCEEDED") {
+                    errorState = 'error_quota';
+                    errorMessage = t.errorQuotaExceeded;
+                } else if (imgErr.message === 'API_KEY_INVALID') {
+                    errorMessage = t.errorApiKey;
+                }
+            } else {
+                 errorMessage = t.errorContent;
+            }
+            
+            setError(errorMessage);
+            updateRecipeState(recipeId, { imageState: errorState });
+        }
+    }, [recipes, favoriteRecipes, language, t]);
+
 
     const handleScanRequest = () => {
         fileInputRef.current?.click();
@@ -441,6 +438,7 @@ const App: React.FC = () => {
                       onToggleFavorite={handleToggleFavorite}
                       isFavorite={favoriteRecipes.some(fav => fav.id === recipe.id)}
                       onShare={handleShareRecipe}
+                      onGenerateImage={handleGenerateImageForRecipe}
                     />
                 ))}
             </div>
@@ -457,6 +455,7 @@ const App: React.FC = () => {
                                 onToggleFavorite={handleToggleFavorite}
                                 isFavorite={true}
                                 onShare={handleShareRecipe}
+                                onGenerateImage={handleGenerateImageForRecipe}
                             />
                         ))}
                     </div>
@@ -476,6 +475,7 @@ const App: React.FC = () => {
                     onToggleFavorite={handleToggleFavorite}
                     isFavorite={favoriteRecipes.some(fav => fav.id === sharedRecipe.id)}
                     onShare={handleShareRecipe}
+                    onGenerateImage={handleGenerateImageForRecipe}
                  />}
             </div>
              <div className="text-center mt-12">
@@ -522,21 +522,33 @@ const App: React.FC = () => {
                             <p className="text-md text-green-100">{t.subtitle}</p>
                         </div>
                     </div>
-                    <div className="flex gap-1 bg-green-600/50 rounded-full p-1">
-                        <button
-                            onClick={() => setLanguage('es')}
-                            className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors ${language === 'es' ? 'bg-white text-green-600' : 'text-white hover:bg-green-500/80'}`}
-                            aria-label="Cambiar a Español"
-                        >
-                            ES
-                        </button>
-                        <button
-                            onClick={() => setLanguage('en')}
-                            className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors ${language === 'en' ? 'bg-white text-green-600' : 'text-white hover:bg-green-500/80'}`}
-                            aria-label="Switch to English"
-                        >
-                            EN
-                        </button>
+                    <div className="flex items-center gap-4">
+                        <div className="flex gap-1 bg-green-600/50 rounded-full p-1">
+                            <button
+                                onClick={() => setLanguage('es')}
+                                className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors ${language === 'es' ? 'bg-white text-green-600' : 'text-white hover:bg-green-500/80'}`}
+                                aria-label="Cambiar a Español"
+                            >
+                                ES
+                            </button>
+                            <button
+                                onClick={() => setLanguage('en')}
+                                className={`px-3 py-1 text-sm font-semibold rounded-full transition-colors ${language === 'en' ? 'bg-white text-green-600' : 'text-white hover:bg-green-500/80'}`}
+                                aria-label="Switch to English"
+                            >
+                                EN
+                            </button>
+                        </div>
+                        <a href="https://github.com/diegogalmarini/NutriChefAI" target="_blank" rel="noopener noreferrer" aria-label="View source code on GitHub" title="View source code on GitHub">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-white hover:text-green-200 transition-colors">
+                                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                            </svg>
+                        </a>
+                        <a href="https://ai.studio/apps/drive/1IwLe9osCWkeonwjZj8PHEDiPpYw9t707" target="_blank" rel="noopener noreferrer" aria-label="Open in AI Studio" title="Open in AI Studio">
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-white hover:text-green-200 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                             <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.562L16.25 22.5l-.648-1.938a3.375 3.375 0 00-2.684-2.684L11.25 18l1.938-.648a3.375 3.375 0 002.684-2.684L16.25 13l.648 1.938a3.375 3.375 0 002.684 2.684L21.5 18l-1.938.648a3.375 3.375 0 00-2.684 2.684z" />
+                           </svg>
+                        </a>
                     </div>
                 </header>
             </div>
